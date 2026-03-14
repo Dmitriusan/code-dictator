@@ -1,119 +1,173 @@
 # Code Dictator
 
-**Voice dictation for Claude, Copilot, Codex & Cline — speak instead of type.**
+Voice dictation for developers — speak code, commands, and prose directly into VS Code.
 
-Stop typing prompts. Press `Alt+V`, say what you mean, and Code Dictator puts the text exactly where you need it — in Claude Chat, Copilot Chat, your editor, or any input field. Zero native dependencies, 90+ languages, works on every OS.
+Stop typing prompts. Press `Alt+V`, say what you mean, and Code Dictator puts the text exactly where you need it — Claude Chat, Copilot Chat, your editor, or any input field. Zero native dependencies. 90+ languages. Works on every OS.
+
+---
 
 ## Features
 
-### Push-to-Talk Voice Input
-Press `Alt+V` to start dictating. Press again to stop. Text appears wherever your cursor is — in Claude Chat, Copilot Chat, your editor, or any input field.
+| Mode / Capability | ElevenLabs | OpenAI Whisper | Custom |
+|---|---|---|---|
+| Dictate (toggle or hold-to-talk) | ✓ | ✓ | ✓ |
+| Code-aware symbol conversion | ✓ | ✓ | ✓ |
+| Transcribe audio file | ✓ | ✓ | ✓ |
+| Language auto-detect | ✓ (90+ langs) | ✓ (57 langs) | model-dependent |
+| LLM text cleanup | ✓* | ✓* | ✓* |
+| Audio noise reduction | ✓ | ✓ | ✓ |
+| Usage & cost tracking | ✓ | ✓ | ✓ |
+| Native ALSA fallback (Linux) | ✓ | ✓ | ✓ |
 
-### Works With Every AI Assistant
-Claude, Copilot, Codex, Cline, Continue — Code Dictator injects text into any focused input. Not locked to a single AI tool.
+\* LLM cleanup requires a separate OpenAI API key regardless of STT provider.
 
-### Zero Dependencies
-No sox. No ffmpeg. No Docker. No companion apps. Just install and talk. Works on Windows, macOS, and Linux out of the box.
+---
 
-### Audio Isolation
-Built-in noise reduction cleans up your audio before transcription. Choose from off, basic (browser-native), or aggressive (multi-stage filtering).
+## Setup
 
-### 90+ Languages
-Auto-detect or pick from 37 languages. Set your preferred languages for quick switching between 2-3 you use daily.
+1. **Install** — Search "Code Dictator" in the VS Code Extensions panel, or install from the Marketplace page.
 
-### Usage Tracking
-See transcription count, audio duration, and estimated costs at a glance in the status bar. Never get surprised by API bills.
+2. **Get an API key** — Sign up for [ElevenLabs](https://elevenlabs.io/?via=code-dictator) (free tier, no credit card required) or use your existing OpenAI API key.
 
-### Code-Aware Dictation
-Say "open paren" and get `(`. Say "arrow function" and get `=>`. 50+ spoken-to-symbol mappings for natural voice coding.
+3. **Configure your provider** — Open VS Code Settings (`Ctrl+,`), search "Code Dictator", select your provider (`elevenlabs`, `openai`, or `custom`), then run `Code Dictator: Set API Key` from the Command Palette to store your key securely.
 
-### Transcribe Audio Files
-Drag and drop any audio file (MP3, WAV, M4A, WebM, FLAC) to transcribe meetings, lectures, or voice memos.
+4. **Set a keyboard shortcut** (optional) — Default is `Alt+V`. To change it: open Keyboard Shortcuts (`Ctrl+K Ctrl+S`), search "Code Dictator: Toggle Voice Recording", click the pencil icon, and press your preferred key combination.
 
-### LLM Text Cleanup
-Optionally clean up transcriptions with AI — removes filler words, fixes punctuation, adds paragraph breaks.
+5. **Record your first dictation** — Click into a Claude Chat / Copilot Chat input, your editor, or any text field. Press `Alt+V`, speak, press `Alt+V` again. Text appears at the cursor.
 
-## Quick Start
+---
 
-1. Install Code Dictator from the VS Code Marketplace
-2. Follow the 30-second setup wizard
-3. Press `Alt+V` and start talking
+## Provider Comparison
 
-## Providers
+| | ElevenLabs Scribe v2 | OpenAI Whisper | Custom |
+|---|---|---|---|
+| **Word accuracy** | ~96.7% | ~95–97% | Model-dependent |
+| **Cost per minute** | ~$0.0067 | ~$0.006 | Free (local) |
+| **Latency** | ~1–2s | ~1–3s | Varies |
+| **Languages** | 90+ | 57 | Model-dependent |
+| **Free tier** | Yes | No | N/A |
+| **BYOK required** | Yes | Yes | No |
+| **Best for** | Highest accuracy, multilingual | Existing OpenAI users | Privacy / air-gapped |
 
-### ElevenLabs (Recommended)
-Best-in-class accuracy with Scribe v2 — 96.7% word accuracy, 90+ languages.
-→ [Get your free API key](https://elevenlabs.io/?via=code-dictator)
-
-### OpenAI Whisper
-Great alternative if you already have an OpenAI API key. Any Whisper-compatible API works.
-
-### Custom / Local
-Point to any Whisper-compatible endpoint — faster-whisper-server, whisper.cpp, or your own setup.
-
-## Pricing
-
-Code Dictator is **free and open-source**. You pay only for the STT provider:
-- ElevenLabs: Free tier available, then ~$0.40/hour
-- OpenAI Whisper: ~$0.36/hour
-- Local/Custom: Free
-
-## Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `codeDictator.provider` | `elevenlabs` | STT provider |
-| `codeDictator.recordingMode` | `toggle` | Press-twice or hold-to-talk |
-| `codeDictator.audioIsolation` | `basic` | Noise reduction level |
-| `codeDictator.language` | (auto) | Transcription language |
-| `codeDictator.preferredLanguages` | `[]` | Quick-switch language shortlist |
-| `codeDictator.codeAwareMode` | `true` | Spoken-to-symbol conversion |
-| `codeDictator.autoCleanup` | `false` | LLM filler word removal |
-| `codeDictator.defaultTarget` | `auto` | Where to send transcriptions |
-| `codeDictator.autoCopyToClipboard` | `true` | Also copy to clipboard |
-| `codeDictator.showCostIndicator` | `true` | Show cost in status bar |
+---
 
 ## Keyboard Shortcuts
 
-| Action | Windows/Linux | macOS |
-|--------|--------------|-------|
-| Toggle recording | `Alt+V` | `Alt+V` |
-| Cancel recording | `Escape` | `Escape` |
+| Action | Default Shortcut |
+|---|---|
+| Toggle recording (start / stop) | `Alt+V` |
+| Cancel recording (discard) | `Escape` (while recording) |
 
-All keybindings are fully customizable via VS Code's Keyboard Shortcuts editor.
+To customize: open Keyboard Shortcuts (`Ctrl+K Ctrl+S`), search "Code Dictator: Toggle Voice Recording", click the pencil icon, press your new binding.
+
+---
+
+## Code-Aware Mode
+
+When code-aware mode is enabled (default: on), spoken programming terms convert to their symbol equivalents before insertion. Useful when dictating into a code editor rather than a chat input.
+
+| Say | Inserted |
+|---|---|
+| `open paren` | `(` |
+| `close paren` | `)` |
+| `open bracket` | `[` |
+| `close bracket` | `]` |
+| `open brace` | `{` |
+| `close brace` | `}` |
+| `arrow function` | `=>` |
+| `double equals` | `==` |
+| `triple equals` | `===` |
+| `dot` | `.` |
+| `new line` | *(line break)* |
+
+50+ mappings total. Example:
+
+> **Say**: "const items equals open bracket close bracket"
+> **Inserted**: `const items = []`
+
+> **Say**: "if open paren error triple equals null close paren"
+> **Inserted**: `if (error === null)`
+
+When dictating into Claude Chat or Copilot Chat, disable code-aware mode or speak naturally — the AI handles code generation from plain-language prompts.
+
+---
+
+## ElevenLabs
+
+ElevenLabs Scribe v2 offers the highest transcription accuracy available — 96.7% word accuracy across 90+ languages. Free tier is available with no credit card required to start.
+
+→ [Sign up for ElevenLabs](https://elevenlabs.io/?via=code-dictator)
+
+---
+
+## Pricing
+
+Code Dictator is free and open-source. You pay only for the speech-to-text API:
+
+| Provider | Cost |
+|---|---|
+| ElevenLabs | Free tier, then ~$0.0067/min (~$0.40/hr) |
+| OpenAI Whisper | ~$0.006/min (~$0.36/hr) |
+| Custom / Local | Free |
+
+A typical 30-second prompt dictation costs under $0.01.
+
+---
+
+## All Settings
+
+| Setting | Default | Options / Description |
+|---|---|---|
+| `codeDictator.provider` | `elevenlabs` | `elevenlabs`, `openai`, `custom` |
+| `codeDictator.customApiUrl` | *(empty)* | Whisper-compatible endpoint URL |
+| `codeDictator.recordingMode` | `toggle` | `toggle` (press twice) or `hold` (hold key) |
+| `codeDictator.audioIsolation` | `basic` | `off`, `basic`, `aggressive` |
+| `codeDictator.language` | *(auto)* | ISO 639-1 code or leave blank for auto-detect |
+| `codeDictator.preferredLanguages` | `[]` | Shortlist for the language picker |
+| `codeDictator.codeAwareMode` | `true` | Spoken-to-symbol conversion |
+| `codeDictator.autoCleanup` | `false` | LLM filler word removal (requires OpenAI key) |
+| `codeDictator.cleanupModel` | `gpt-4.1-nano` | LLM for cleanup: nano / mini / full |
+| `codeDictator.defaultTarget` | `auto` | `auto`, `editor`, `clipboard` |
+| `codeDictator.autoCopyToClipboard` | `true` | Also copy to clipboard after insertion |
+| `codeDictator.showCostIndicator` | `true` | Show estimated cost in status bar |
+| `codeDictator.maxRecordingDuration` | `300` | Max recording seconds (10–3600) |
+| `codeDictator.silenceTimeout` | `0` | Auto-stop after N seconds of silence (0 = off) |
+
+---
 
 ## Troubleshooting
 
-### Microphone not working
-- **macOS**: System Settings → Privacy & Security → Microphone → enable VS Code
-- **Windows**: Settings → Privacy → Microphone → allow app access
-- **Linux**: Check PulseAudio/PipeWire settings with `pavucontrol`
+**Microphone not detected**
+- macOS: System Settings → Privacy & Security → Microphone → enable VS Code
+- Windows: Settings → Privacy → Microphone → allow app access
+- Linux: Check PulseAudio/PipeWire with `pavucontrol`; native ALSA fallback activates automatically if the WebView recorder fails
 
-### Recording fails in Remote/SSH/WSL
-Voice input requires a local VS Code window. Remote environments don't have microphone access.
+**Recording fails in Remote / SSH / WSL**
+Voice input requires a local VS Code window. Remote environments don't expose microphone access to extensions.
 
-### Transcription returns empty text
-- Check that your microphone is working (test with another app)
-- Verify your API key is correct
-- Check your internet connection
+**Transcription comes back empty**
+- Test your microphone in another app first
+- Verify your API key: run `Code Dictator: Set API Key` from the Command Palette
+- Check your provider's status page
+
+---
 
 ## Privacy
 
-- API keys stored in your OS keychain (VS Code SecretStorage)
-- Audio sent only to your configured provider
-- No telemetry — zero usage data collected
-- No audio stored on disk
+- API keys stored via VS Code SecretStorage (OS keychain) — never written to disk in plaintext
+- Audio sent only to your configured provider, nowhere else
+- No telemetry, no usage data collected by this extension
+- No audio retained after transcription completes
+
+---
 
 ## Contributing
 
-Contributions welcome! Please open an issue first to discuss what you'd like to change.
+Open an issue first to discuss what you'd like to change. PRs welcome.
 
-## Support
+[GitHub Issues](https://github.com/Dmitriusan/code-dictator/issues)
 
-If Code Dictator saves you time, consider:
-- [Buy me a coffee](https://buymeacoffee.com/dmitriusan)
-- Star this repo on GitHub
-- Leave a review on the VS Code Marketplace
+---
 
 ## License
 

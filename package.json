@@ -246,7 +246,7 @@
     "lint": "eslint src --ext ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "vscode-test",
+    "test:e2e": "tsc -p tsconfig.e2e.json && node dist-test/runTests.js",
     "package": "npm run build && vsce package",
     "prepublish": "npm run build",
     "vscode:prepublish": "npm run build"
