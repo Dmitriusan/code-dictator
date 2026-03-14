@@ -153,6 +153,48 @@ describe('OpenAIProvider', () => {
       expect(bodyStr).toContain('whisper-1');
     });
 
+    it('requests verbose_json response format for language detection', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'test' }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key');
+      await provider.transcribe(Buffer.from('audio'), {});
+
+      const bodyStr = (mockFetch.mock.calls[0][1].body as Buffer).toString();
+      expect(bodyStr).toContain('verbose_json');
+    });
+
+    it('returns detected language from verbose_json response', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'bonjour', language: 'fr', duration: 2.5 }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key');
+      const result = await provider.transcribe(Buffer.from('audio'), {});
+
+      expect(result.language).toBe('fr');
+      expect(result.duration).toBe(2.5);
+    });
+
+    it('uses duration from verbose_json for cost estimation', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'test', duration: 30 }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key');
+      const result = await provider.transcribe(Buffer.from('audio'), {});
+
+      // 30s * $0.0001/s = $0.003
+      expect(result.cost).toBeCloseTo(0.003, 4);
+    });
+
     it('throws with error message on API error', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,

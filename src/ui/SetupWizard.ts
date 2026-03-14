@@ -3,7 +3,7 @@ import type { StorageService } from '../storage/StorageService';
 import { createProvider } from '../providers/ProviderFactory';
 import type { ProviderType } from '../types';
 
-const ELEVENLABS_REFERRAL = 'https://elevenlabs.io/app/developers/api-keys?via=code-dictator';
+const ELEVENLABS_REFERRAL = 'https://try.elevenlabs.io/rgoomc9z8dvv';
 const OPENAI_KEYS_URL = 'https://platform.openai.com/api-keys';
 
 interface ProviderPickItem extends vscode.QuickPickItem {
@@ -107,7 +107,13 @@ export async function runSetupWizard(storage: StorageService): Promise<boolean> 
       placeHolder: 'http://localhost:8000/v1/audio/transcriptions',
       ignoreFocusOut: true,
       validateInput: (v) => {
-        try { new URL(v); return undefined; } catch { return 'Please enter a valid URL'; }
+        try {
+          const url = new URL(v);
+          if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+            return 'URL must use http:// or https://';
+          }
+          return undefined;
+        } catch { return 'Please enter a valid URL'; }
       },
     });
     if (!url) return false;
@@ -140,7 +146,7 @@ export async function runSetupWizard(storage: StorageService): Promise<boolean> 
   const valid = await provider.validateConfig();
 
   if (valid) {
-    vscode.window.setStatusBarMessage('$(check) Code Dictator: Setup complete! Press Alt+V to start dictating.', 5000);
+    vscode.window.setStatusBarMessage('$(check) Code Dictator: Setup complete! Press Alt+D to start dictating.', 5000);
     return true;
   } else {
     const retry = await vscode.window.showWarningMessage(

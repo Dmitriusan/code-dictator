@@ -146,4 +146,42 @@ describe('Formatter.format()', () => {
       'Hello world. How are you? Fine.'
     );
   });
+
+  // --- Noise & stutter removal ---
+
+  describe('stutter removal', () => {
+    it('removes letter-uh stutters', () => {
+      expect(format('I want to u-uh use this')).toBe('I want to use this');
+    });
+
+    it('removes m-uh stutter with comma', () => {
+      expect(format('the m-uh, quota')).toBe('The quota');
+    });
+
+    it('removes b-um stutter', () => {
+      expect(format('the b-um button')).toBe('The button');
+    });
+  });
+
+  describe('bracketed noise removal', () => {
+    it('removes [engine revving]', () => {
+      expect(format('hello [engine revving]')).toBe('Hello');
+    });
+
+    it('removes [cough] mid-sentence', () => {
+      expect(format('I want [cough] this thing')).toBe('I want this thing');
+    });
+
+    it('removes multiple bracketed noises', () => {
+      expect(format('[noise] hello [sneeze] world [laughter]')).toBe('Hello world');
+    });
+  });
+
+  describe('combined noise cleanup', () => {
+    it('removes stutters and bracketed noise together', () => {
+      const result = format('I u-uh, want this [cough] thing');
+      expect(result).not.toContain('u-uh');
+      expect(result).not.toContain('[cough]');
+    });
+  });
 });

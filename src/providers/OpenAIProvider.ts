@@ -38,6 +38,13 @@ export class OpenAIProvider implements STTProvider {
       `whisper-1\r\n`
     ));
 
+    // response_format: verbose_json returns language detection alongside text
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="response_format"\r\n\r\n` +
+      `verbose_json\r\n`
+    ));
+
     // language field (optional)
     if (options.language) {
       parts.push(Buffer.from(
@@ -65,17 +72,19 @@ export class OpenAIProvider implements STTProvider {
       throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
     }
 
-    const data = await response.json() as { text?: string };
+    const data = await response.json() as { text?: string; language?: string; duration?: number };
 
     if (data.text === undefined) {
       throw new Error('OpenAI returned an unexpected response format');
     }
 
-    const durationSec = audio.length / 16000; // rough estimate
+    const durationSec = data.duration ?? (audio.length / 16000);
     const cost = durationSec * COST_PER_SECOND;
 
     return {
       text: data.text,
+      language: data.language,
+      duration: data.duration,
       cost,
     };
   }

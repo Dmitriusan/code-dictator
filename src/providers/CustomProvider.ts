@@ -4,7 +4,10 @@ export class CustomProvider implements STTProvider {
   readonly name = 'Custom Whisper-Compatible';
   readonly id = 'custom';
 
-  constructor(private readonly endpoint: string) {}
+  constructor(
+    private readonly endpoint: string,
+    private readonly getApiKey?: () => Promise<string | undefined>,
+  ) {}
 
   async transcribe(audio: Buffer, options: TranscribeOptions): Promise<TranscriptionResult> {
     if (!this.endpoint) {
@@ -14,11 +17,15 @@ export class CustomProvider implements STTProvider {
     const boundary = `----CodeDictator${Date.now()}${Math.random().toString(36).slice(2)}`;
     const parts: Buffer[] = [];
 
+    const mimeType = options.mimeType ?? 'audio/webm';
+    const extMap: Record<string, string> = { 'audio/wav': 'wav', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a' };
+    const ext = extMap[mimeType] ?? 'webm';
+
     // file field
     parts.push(Buffer.from(
       `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="recording.webm"\r\n` +
-      `Content-Type: audio/webm\r\n\r\n`
+      `Content-Disposition: form-data; name="file"; filename="recording.${ext}"\r\n` +
+      `Content-Type: ${mimeType}\r\n\r\n`
     ));
     parts.push(audio);
     parts.push(Buffer.from('\r\n'));
@@ -43,11 +50,19 @@ export class CustomProvider implements STTProvider {
 
     const body = Buffer.concat(parts);
 
+    const headers: Record<string, string> = {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+    };
+
+    // Add authorization if an API key is configured
+    const apiKey = this.getApiKey ? await this.getApiKey() : undefined;
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
     const response = await fetch(this.endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
+      headers,
       body,
     });
 

@@ -78,8 +78,8 @@
     "keybindings": [
       {
         "command": "codeDictator.toggleRecording",
-        "key": "alt+v",
-        "mac": "alt+v"
+        "key": "alt+d",
+        "mac": "alt+d"
       },
       {
         "command": "codeDictator.cancelRecording",
@@ -110,10 +110,9 @@
         "codeDictator.recordingMode": {
           "type": "string",
           "default": "toggle",
-          "enum": ["toggle", "hold"],
+          "enum": ["toggle"],
           "enumDescriptions": [
-            "Press once to start recording, press again to stop",
-            "Hold key to record, release to stop and transcribe"
+            "Press once to start recording, press again to stop"
           ],
           "description": "Recording activation mode"
         },
@@ -149,7 +148,7 @@
         "codeDictator.autoCleanup": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Clean up transcription with LLM (remove filler words, fix punctuation). **Requires an OpenAI API key** — set one via the `Code Dictator: Set API Key` command (choose OpenAI provider)."
+          "markdownDescription": "Use an LLM to further clean up transcriptions (rephrase, fix grammar, remove context-sensitive fillers). **Requires an OpenAI API key.**\n\n*Note: Basic filler removal (uh, um, äh, ну, etc.) is always active — language-aware and free, no API needed.*"
         },
         "codeDictator.cleanupModel": {
           "type": "string",
@@ -195,7 +194,7 @@
           "default": 0,
           "minimum": 0,
           "maximum": 60,
-          "description": "Auto-stop recording after N seconds of silence (0 = disabled)"
+          "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Silence detection requires the webview-based recorder. On Linux systems using arecord as the native recorder, this setting has no effect — use `maxRecordingDuration` instead.*"
         }
       }
     },
@@ -220,7 +219,7 @@
           {
             "id": "tryRecording",
             "title": "Try Voice Recording",
-            "description": "Press **Alt+V** or click the mic icon in the status bar to start recording.\n\n[Toggle Recording](command:codeDictator.toggleRecording)",
+            "description": "Press **Alt+D** or click the mic icon in the status bar to start recording.\n\n[Toggle Recording](command:codeDictator.toggleRecording)",
             "media": { "markdown": "resources/walkthrough/record.md" }
           },
           {

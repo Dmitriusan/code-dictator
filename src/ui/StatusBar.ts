@@ -44,15 +44,14 @@ export class StatusBar implements vscode.Disposable {
       case 'idle':
         this.stopRecordingTimer();
         this.micButton.text = '$(mic) Dictator';
-        this.micButton.tooltip = 'Code Dictator: Click to start recording (Alt+V)';
+        this.micButton.tooltip = 'Code Dictator: Click to start recording (Alt+D)';
         this.micButton.backgroundColor = undefined;
         this.micButton.show();
         break;
 
       case 'recording':
-        this.recordingStartTime = Date.now();
         this.micButton.text = '$(mic-filled) 0:00';
-        this.micButton.tooltip = 'Code Dictator: Click to stop recording (Alt+V)';
+        this.micButton.tooltip = 'Code Dictator: Click to stop recording (Alt+D)';
         this.micButton.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
         this.micButton.show();
         this.startRecordingTimer();
@@ -118,6 +117,10 @@ export class StatusBar implements vscode.Disposable {
 
   dispose(): void {
     this.stopRecordingTimer();
+    if (this.transientTimer) {
+      clearTimeout(this.transientTimer);
+      this.transientTimer = undefined;
+    }
     this.micButton.dispose();
     this.languageIndicator.dispose();
     this.costIndicator.dispose();
@@ -125,6 +128,7 @@ export class StatusBar implements vscode.Disposable {
 
   private startRecordingTimer(): void {
     this.stopRecordingTimer();
+    this.recordingStartTime = Date.now();
     this.recordingTimer = setInterval(() => {
       if (this.recordingStartTime) {
         const elapsed = Math.floor((Date.now() - this.recordingStartTime) / 1000);

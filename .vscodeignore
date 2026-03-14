@@ -17,3 +17,5 @@ vitest.config*
 *.spec.*
 dist/*.map
 dist/**/*.map
+tmp/
+memory/

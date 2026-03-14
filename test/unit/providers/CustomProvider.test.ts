@@ -76,7 +76,7 @@ describe('CustomProvider', () => {
       );
     });
 
-    it('sends correct request to custom endpoint', async () => {
+    it('sends correct request to custom endpoint without API key', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ text: 'transcribed text' }),
@@ -94,11 +94,74 @@ describe('CustomProvider', () => {
       expect(options.method).toBe('POST');
       expect(options.headers['Content-Type']).toContain('multipart/form-data');
 
-      // No Authorization header for custom endpoints
+      // No Authorization header when no API key provided
       expect(options.headers['Authorization']).toBeUndefined();
 
       expect(result.text).toBe('transcribed text');
       expect(result.cost).toBe(0);
+    });
+
+    it('sends Authorization header when API key is configured', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'transcribed text' }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const endpoint = 'http://localhost:8000/v1/audio/transcriptions';
+      const provider = new CustomProvider(endpoint, async () => 'my-custom-key');
+      const audio = Buffer.from('fake-audio-data');
+      await provider.transcribe(audio, {});
+
+      const options = mockFetch.mock.calls[0][1];
+      expect(options.headers['Authorization']).toBe('Bearer my-custom-key');
+    });
+
+    it('omits Authorization header when API key getter returns undefined', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'transcribed text' }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const endpoint = 'http://localhost:8000/v1/audio/transcriptions';
+      const provider = new CustomProvider(endpoint, async () => undefined);
+      await provider.transcribe(Buffer.from('audio'), {});
+
+      const options = mockFetch.mock.calls[0][1];
+      expect(options.headers['Authorization']).toBeUndefined();
+    });
+
+    it('uses correct MIME type and extension from options', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'test' }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new CustomProvider('http://localhost:8000/api');
+      await provider.transcribe(Buffer.from('audio'), { mimeType: 'audio/wav' });
+
+      const bodyBuffer = mockFetch.mock.calls[0][1].body as Buffer;
+      const bodyStr = bodyBuffer.toString();
+      expect(bodyStr).toContain('filename="recording.wav"');
+      expect(bodyStr).toContain('Content-Type: audio/wav');
+    });
+
+    it('defaults to webm MIME type when not specified', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'test' }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new CustomProvider('http://localhost:8000/api');
+      await provider.transcribe(Buffer.from('audio'), {});
+
+      const bodyBuffer = mockFetch.mock.calls[0][1].body as Buffer;
+      const bodyStr = bodyBuffer.toString();
+      expect(bodyStr).toContain('filename="recording.webm"');
+      expect(bodyStr).toContain('Content-Type: audio/webm');
     });
 
     it('includes language when specified', async () => {

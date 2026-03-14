@@ -8,6 +8,7 @@ import { HistoryManager } from './tracking/History';
 import { TextInjector } from './injection/TextInjector';
 import { createProvider } from './providers/ProviderFactory';
 import { format } from './postprocess/Formatter';
+import { removeFillerWords } from './postprocess/FillerWords';
 import { applyCodeAware } from './postprocess/CodeAware';
 import { cleanup as llmCleanup } from './postprocess/LLMCleanup';
 import { showLanguagePicker, showLanguageConfigurator } from './ui/LanguagePicker';
@@ -232,12 +233,17 @@ async function handleStopAndTranscribe(): Promise<void> {
     // Step 1: Auto-formatting (always applied)
     text = format(text);
 
-    // Step 2: Code-aware replacements
+    // Step 2: Language-aware filler word removal (always applied, no API cost)
+    // Priority: provider-detected language → user setting → English fallback
+    const detectedLang = result.language || settings.language || 'en';
+    text = removeFillerWords(text, detectedLang);
+
+    // Step 3: Code-aware replacements
     if (settings.codeAwareMode) {
       text = applyCodeAware(text);
     }
 
-    // Step 3: LLM cleanup (optional)
+    // Step 4: LLM cleanup (optional)
     if (settings.autoCleanup) {
       const openaiKey = await storageService.getApiKey('openai');
       if (openaiKey) {
@@ -339,6 +345,7 @@ async function handleTranscribeFile(): Promise<void> {
     // Post-process
     let text = result.text;
     text = format(text);
+    text = removeFillerWords(text, result.language || settings.language || 'en');
 
     if (settings.codeAwareMode) {
       text = applyCodeAware(text);

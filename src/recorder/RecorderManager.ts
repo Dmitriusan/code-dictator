@@ -22,8 +22,6 @@ export class RecorderManager implements vscode.Disposable {
   private readyResolve: (() => void) | undefined;
   private disposables: vscode.Disposable[] = [];
   private nativeRecorder: NativeRecorder | null = null;
-  private useNativeFallback = false;
-  private nativeTimerInterval: ReturnType<typeof setInterval> | undefined;
   // Set during the webview permission-detection window to intercept errors
   // before they propagate to external onError handlers.
   private permissionErrorHandler: ((msg: string) => void) | undefined;
@@ -63,12 +61,12 @@ export class RecorderManager implements vscode.Disposable {
       return;
     }
 
-    // If we've previously detected that webview recording doesn't work, go straight to native
-    if (this.useNativeFallback) {
+    // Prefer native recording (no visible webview tab, zero UI artifacts)
+    if (NativeRecorder.isAvailable()) {
       return this.startNativeRecording(maxDuration);
     }
 
-    // Try webview recording first
+    // Fall back to webview MediaRecorder (macOS/Windows without sox)
     try {
       await this.ensurePanel();
 
@@ -101,22 +99,15 @@ export class RecorderManager implements vscode.Disposable {
       });
       return startResult;
     } catch (webviewError) {
-      // Webview mic permission failed — try native fallback
+      // Webview mic permission failed — no native fallback available either
       this.permissionErrorHandler = undefined;
       this._isRecording = false;
       if (this.panel) {
         this.panel.webview.postMessage({ type: 'cancelRecording' } as MessageToWebview);
       }
 
-      if (NativeRecorder.isAvailable()) {
-        this.useNativeFallback = true;
-        console.warn('Code Dictator: Webview mic denied, switching to native recording fallback');
-        return this.startNativeRecording(maxDuration);
-      }
-
-      // No fallback available
       throw new Error(
-        'Microphone permission denied. Please allow microphone access in your browser/OS settings.'
+        'Microphone permission denied. Please allow microphone access in your browser/OS settings, or install arecord (Linux) / sox (macOS/Windows).'
       );
     }
   }

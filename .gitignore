@@ -6,3 +6,4 @@ out/
 .env
 .claude/
 CLAUDE.md
+tmp/

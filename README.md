@@ -2,7 +2,7 @@
 
 Voice dictation for developers — speak code, commands, and prose directly into VS Code.
 
-Stop typing prompts. Press `Alt+V`, say what you mean, and Code Dictator puts the text exactly where you need it — Claude Chat, Copilot Chat, your editor, or any input field. Zero native dependencies. 90+ languages. Works on every OS.
+Stop typing prompts. Press `Alt+D`, say what you mean, and Code Dictator puts the text exactly where you need it — Claude Chat, Copilot Chat, your editor, or any input field. Zero native dependencies. 90+ languages. Works on every OS.
 
 ---
 
@@ -14,6 +14,7 @@ Stop typing prompts. Press `Alt+V`, say what you mean, and Code Dictator puts th
 | Code-aware symbol conversion | ✓ | ✓ | ✓ |
 | Transcribe audio file | ✓ | ✓ | ✓ |
 | Language auto-detect | ✓ (90+ langs) | ✓ (57 langs) | model-dependent |
+| Filler word removal (no API) | ✓ auto-detected | ✓ auto-detected | ✓ (uses setting) |
 | LLM text cleanup | ✓* | ✓* | ✓* |
 | Audio noise reduction | ✓ | ✓ | ✓ |
 | Usage & cost tracking | ✓ | ✓ | ✓ |
@@ -27,13 +28,13 @@ Stop typing prompts. Press `Alt+V`, say what you mean, and Code Dictator puts th
 
 1. **Install** — Search "Code Dictator" in the VS Code Extensions panel, or install from the Marketplace page.
 
-2. **Get an API key** — Sign up for [ElevenLabs](https://elevenlabs.io/?via=code-dictator) (free tier, no credit card required) or use your existing OpenAI API key.
+2. **Get an API key** — Sign up for [ElevenLabs](https://try.elevenlabs.io/rgoomc9z8dvv) (free tier, no credit card required) or use your existing OpenAI API key.
 
 3. **Configure your provider** — Open VS Code Settings (`Ctrl+,`), search "Code Dictator", select your provider (`elevenlabs`, `openai`, or `custom`), then run `Code Dictator: Set API Key` from the Command Palette to store your key securely.
 
-4. **Set a keyboard shortcut** (optional) — Default is `Alt+V`. To change it: open Keyboard Shortcuts (`Ctrl+K Ctrl+S`), search "Code Dictator: Toggle Voice Recording", click the pencil icon, and press your preferred key combination.
+4. **Set a keyboard shortcut** (optional) — Default is `Alt+D`. To change it: open Keyboard Shortcuts (`Ctrl+K Ctrl+S`), search "Code Dictator: Toggle Voice Recording", click the pencil icon, and press your preferred key combination.
 
-5. **Record your first dictation** — Click into a Claude Chat / Copilot Chat input, your editor, or any text field. Press `Alt+V`, speak, press `Alt+V` again. Text appears at the cursor.
+5. **Record your first dictation** — Click into a Claude Chat / Copilot Chat input, your editor, or any text field. Press `Alt+D`, speak, press `Alt+D` again. Text appears at the cursor.
 
 ---
 
@@ -42,7 +43,7 @@ Stop typing prompts. Press `Alt+V`, say what you mean, and Code Dictator puts th
 | | ElevenLabs Scribe v2 | OpenAI Whisper | Custom |
 |---|---|---|---|
 | **Word accuracy** | ~96.7% | ~95–97% | Model-dependent |
-| **Cost per minute** | ~$0.0067 | ~$0.006 | Free (local) |
+| **Cost per minute** | ~$0.0067 | — | Free (local) |
 | **Latency** | ~1–2s | ~1–3s | Varies |
 | **Languages** | 90+ | 57 | Model-dependent |
 | **Free tier** | Yes | No | N/A |
@@ -55,7 +56,7 @@ Stop typing prompts. Press `Alt+V`, say what you mean, and Code Dictator puts th
 
 | Action | Default Shortcut |
 |---|---|
-| Toggle recording (start / stop) | `Alt+V` |
+| Toggle recording (start / stop) | `Alt+D` |
 | Cancel recording (discard) | `Escape` (while recording) |
 
 To customize: open Keyboard Shortcuts (`Ctrl+K Ctrl+S`), search "Code Dictator: Toggle Voice Recording", click the pencil icon, press your new binding.
@@ -92,11 +93,25 @@ When dictating into Claude Chat or Copilot Chat, disable code-aware mode or spea
 
 ---
 
+## Filler Word Removal
+
+Code Dictator automatically removes hesitation markers from your transcription — no API key required. The cleanup uses the language detected by the STT provider (ElevenLabs returns it in every response; OpenAI Whisper reports it via verbose response format). Falls back to your configured language, then English.
+
+Covers all 90+ languages supported by ElevenLabs and 57 languages supported by OpenAI Whisper — English `uh/um/er/hmm`, German `äh/ähm`, French `euh/heu`, Russian `ну/значит`, Japanese `えーと/あの`, and many more.
+
+Also removes:
+- Stutter patterns: `u-uh`, `m-uh`, `b-um` → removed
+- Bracketed noise: `[engine revving]`, `[cough]` → removed
+
+For deeper cleanup (rephrasing, grammar, context-sensitive filler detection), enable **LLM Cleanup** (`codeDictator.autoCleanup`) which uses an OpenAI API call.
+
+---
+
 ## ElevenLabs
 
 ElevenLabs Scribe v2 offers the highest transcription accuracy available — 96.7% word accuracy across 90+ languages. Free tier is available with no credit card required to start.
 
-→ [Sign up for ElevenLabs](https://elevenlabs.io/?via=code-dictator)
+→ [Sign up for ElevenLabs](https://try.elevenlabs.io/rgoomc9z8dvv)
 
 ---
 
@@ -107,7 +122,6 @@ Code Dictator is free and open-source. You pay only for the speech-to-text API:
 | Provider | Cost |
 |---|---|
 | ElevenLabs | Free tier, then ~$0.0067/min (~$0.40/hr) |
-| OpenAI Whisper | ~$0.006/min (~$0.36/hr) |
 | Custom / Local | Free |
 
 A typical 30-second prompt dictation costs under $0.01.
@@ -125,7 +139,7 @@ A typical 30-second prompt dictation costs under $0.01.
 | `codeDictator.language` | *(auto)* | ISO 639-1 code or leave blank for auto-detect |
 | `codeDictator.preferredLanguages` | `[]` | Shortlist for the language picker |
 | `codeDictator.codeAwareMode` | `true` | Spoken-to-symbol conversion |
-| `codeDictator.autoCleanup` | `false` | LLM filler word removal (requires OpenAI key) |
+| `codeDictator.autoCleanup` | `false` | LLM cleanup for rephrasing/grammar (requires OpenAI key; basic filler removal is always on) |
 | `codeDictator.cleanupModel` | `gpt-4.1-nano` | LLM for cleanup: nano / mini / full |
 | `codeDictator.defaultTarget` | `auto` | `auto`, `editor`, `clipboard` |
 | `codeDictator.autoCopyToClipboard` | `true` | Also copy to clipboard after insertion |

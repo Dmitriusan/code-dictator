@@ -12,11 +12,24 @@ export function format(text: string): string {
   // Trim leading/trailing whitespace
   result = result.trim();
 
+  // --- Noise & stutter removal (before formatting) ---
+
+  // Remove bracketed sound descriptions: [engine revving], [cough], etc.
+  result = result.replace(/\[.*?\]/g, '');
+
+  // Remove stutter patterns: "u-uh", "m-uh", "b-um" (letter(s)-filler)
+  result = result.replace(/\b\w+-(?:uh|um|ah)\b[,.]?\s*/gi, '');
+
+  // --- Formatting ---
+
   // Collapse multiple spaces into one
   result = result.replace(/ {2,}/g, ' ');
 
   // Collapse multiple newlines into at most two
   result = result.replace(/\n{3,}/g, '\n\n');
+
+  // Re-trim after removals (filler at start/end may leave whitespace)
+  result = result.trim();
 
   // Capitalize first letter of the entire text
   if (result.length > 0) {

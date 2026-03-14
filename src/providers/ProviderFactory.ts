@@ -13,7 +13,7 @@ export function createProvider(
     case 'openai':
       return new OpenAIProvider(() => getApiKey('openai'));
     case 'custom':
-      return new CustomProvider(settings.customApiUrl);
+      return new CustomProvider(settings.customApiUrl, () => getApiKey('custom'));
     default: {
       // Exhaustive check — TypeScript will error here if a new ProviderType is added
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
