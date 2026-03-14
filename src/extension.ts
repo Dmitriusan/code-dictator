@@ -1,0 +1,441 @@
+import * as vscode from 'vscode';
+import * as fs from 'fs';
+import { StorageService } from './storage/StorageService';
+import { StatusBar } from './ui/StatusBar';
+import { RecorderManager } from './recorder/RecorderManager';
+import { UsageTracker } from './tracking/UsageTracker';
+import { HistoryManager } from './tracking/History';
+import { TextInjector } from './injection/TextInjector';
+import { createProvider } from './providers/ProviderFactory';
+import { format } from './postprocess/Formatter';
+import { applyCodeAware } from './postprocess/CodeAware';
+import { cleanup as llmCleanup } from './postprocess/LLMCleanup';
+import { showLanguagePicker, showLanguageConfigurator } from './ui/LanguagePicker';
+import { runSetupWizard } from './ui/SetupWizard';
+import type { TranscriptionResult } from './types';
+
+let storageService: StorageService;
+let statusBar: StatusBar;
+let recorder: RecorderManager;
+let usageTracker: UsageTracker;
+let historyManager: HistoryManager;
+let textInjector: TextInjector;
+let cleanupKeyWarningShown = false;
+
+export function activate(context: vscode.ExtensionContext): void {
+  // Initialize services
+  storageService = new StorageService(context);
+  statusBar = new StatusBar();
+  recorder = new RecorderManager(context.extensionUri);
+  usageTracker = new UsageTracker(storageService);
+  historyManager = new HistoryManager(storageService);
+  textInjector = new TextInjector();
+
+  // Push disposables
+  context.subscriptions.push(statusBar);
+  context.subscriptions.push(recorder);
+
+  // Initialize status bar state
+  const settings = storageService.getSettings();
+  statusBar.updateLanguage(settings.language);
+  statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);
+
+  // Set initial recording context
+  vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+
+  // Wire up recorder events
+  context.subscriptions.push(
+    recorder.onError((message) => {
+      vscode.window.showErrorMessage(`Code Dictator: ${message}`);
+      statusBar.updateState('idle');
+      vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+    }),
+  );
+
+  context.subscriptions.push(
+    recorder.onSilenceDetected(() => {
+      // Auto-stop on silence if the user has configured it
+      if (recorder.isRecording) {
+        handleStopAndTranscribe();
+      }
+    }),
+  );
+
+  // Register commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.toggleRecording', () => {
+      if (recorder.isRecording) {
+        handleStopAndTranscribe();
+      } else {
+        handleStartRecording();
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.cancelRecording', () => {
+      if (recorder.isRecording) {
+        recorder.cancelRecording();
+        statusBar.updateState('idle');
+        vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+        statusBar.showTransientMessage('$(x) Cancelled', 1500);
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.showHistory', () => {
+      historyManager.showHistoryQuickPick();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.transcribeFile', () => {
+      handleTranscribeFile();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.showUsage', () => {
+      handleShowUsage();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.selectLanguage', async () => {
+      const currentSettings = storageService.getSettings();
+      const code = await showLanguagePicker(currentSettings);
+      if (code !== undefined) {
+        statusBar.updateLanguage(code);
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.openSettings', () => {
+      vscode.commands.executeCommand('workbench.action.openSettings', 'codeDictator');
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.setApiKey', async () => {
+      await runSetupWizard(storageService);
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.configureLanguages', async () => {
+      const currentSettings = storageService.getSettings();
+      await showLanguageConfigurator(currentSettings);
+      // Refresh status bar after language config changes
+      const newSettings = storageService.getSettings();
+      statusBar.updateLanguage(newSettings.language);
+    }),
+  );
+
+  // Listen for configuration changes
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('codeDictator')) {
+        const newSettings = storageService.getSettings();
+        statusBar.updateLanguage(newSettings.language);
+        statusBar.updateCost(usageTracker.getStatusBarText(), newSettings.showCostIndicator);
+      }
+    }),
+  );
+
+  // Show onboarding on first activation
+  const onboarded = context.globalState.get<boolean>('codeDictator.onboarded', false);
+  if (!onboarded) {
+    context.globalState.update('codeDictator.onboarded', true);
+    // Run setup wizard, then show walkthrough
+    runSetupWizard(storageService).then(() => {
+      vscode.commands.executeCommand(
+        'workbench.action.openWalkthrough',
+        'irrationalways.code-dictator#codeDictator.setup',
+        false,
+      );
+    });
+  }
+}
+
+async function handleStartRecording(): Promise<void> {
+  const settings = storageService.getSettings();
+  const provider = createProvider(settings, (p) => storageService.getApiKey(p));
+
+  // Validate provider config before starting
+  const valid = await provider.validateConfig();
+  if (!valid) {
+    const action = await vscode.window.showErrorMessage(
+      `Code Dictator: ${provider.name} is not configured. Please set your API key.`,
+      'Set API Key',
+      'Open Settings',
+    );
+    if (action === 'Set API Key') {
+      vscode.commands.executeCommand('codeDictator.setApiKey');
+    } else if (action === 'Open Settings') {
+      vscode.commands.executeCommand('codeDictator.openSettings');
+    }
+    return;
+  }
+
+  try {
+    statusBar.updateState('recording');
+    vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', true);
+    await recorder.startRecording(
+      settings.audioIsolation,
+      settings.silenceTimeout,
+      settings.maxRecordingDuration,
+    );
+  } catch (error) {
+    statusBar.updateState('idle');
+    vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.showErrorMessage(`Code Dictator: Failed to start recording — ${message}`);
+  }
+}
+
+async function handleStopAndTranscribe(): Promise<void> {
+  const settings = storageService.getSettings();
+
+  try {
+    // Stop recording and get audio data
+    statusBar.updateState('transcribing');
+    vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+
+    const audioPayload = await recorder.stopRecording();
+
+    // Transcribe
+    const provider = createProvider(settings, (p) => storageService.getApiKey(p));
+    let result: TranscriptionResult;
+    try {
+      result = await provider.transcribe(audioPayload.buffer, {
+        language: settings.language || undefined,
+        mimeType: audioPayload.mimeType,
+      });
+    } catch (error) {
+      statusBar.updateState('idle');
+      const message = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Code Dictator: Transcription failed — ${message}`);
+      return;
+    }
+
+    if (!result.text.trim()) {
+      statusBar.updateState('idle');
+      statusBar.showTransientMessage('$(warning) No speech detected', 2000);
+      return;
+    }
+
+    // Post-processing pipeline
+    let text = result.text;
+
+    // Step 1: Auto-formatting (always applied)
+    text = format(text);
+
+    // Step 2: Code-aware replacements
+    if (settings.codeAwareMode) {
+      text = applyCodeAware(text);
+    }
+
+    // Step 3: LLM cleanup (optional)
+    if (settings.autoCleanup) {
+      const openaiKey = await storageService.getApiKey('openai');
+      if (openaiKey) {
+        try {
+          text = await llmCleanup(text, openaiKey, settings.cleanupModel);
+        } catch (error) {
+          console.warn('Code Dictator: LLM cleanup failed, using raw text', error);
+        }
+      } else if (!cleanupKeyWarningShown) {
+        cleanupKeyWarningShown = true;
+        const action = await vscode.window.showWarningMessage(
+          'Auto Cleanup is enabled but no OpenAI API key is configured. Transcriptions will not be cleaned up.',
+          'Set API Key',
+        );
+        if (action === 'Set API Key') {
+          vscode.commands.executeCommand('codeDictator.setApiKey');
+        }
+      }
+    }
+
+    // Inject text
+    const destination = await textInjector.inject(
+      text,
+      settings.defaultTarget,
+      settings.autoCopyToClipboard,
+    );
+
+    // Track usage
+    await usageTracker.record(result, provider.id, audioPayload.durationMs);
+
+    // Update status bar
+    statusBar.updateState('idle');
+    statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);
+
+    // Silent feedback via status bar — no popups to interrupt the dictate→review→dictate flow
+    const charCount = text.length;
+    const duration = Math.round(audioPayload.durationMs / 1000);
+    statusBar.showTransientMessage(`$(check) ${charCount} chars, ${duration}s → ${destination}`);
+  } catch (error) {
+    statusBar.updateState('idle');
+    vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('cancelled')) {
+      vscode.window.showErrorMessage(`Code Dictator: ${message}`);
+    }
+  }
+}
+
+async function handleTranscribeFile(): Promise<void> {
+  const fileUris = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: false,
+    filters: {
+      'Audio Files': ['mp3', 'wav', 'webm', 'ogg', 'flac', 'm4a', 'mp4', 'mpeg', 'mpga'],
+      'All Files': ['*'],
+    },
+    title: 'Select an audio file to transcribe',
+  });
+
+  if (!fileUris || fileUris.length === 0) {
+    return;
+  }
+
+  const fileUri = fileUris[0];
+  const settings = storageService.getSettings();
+
+  // Validate provider
+  const provider = createProvider(settings, (p) => storageService.getApiKey(p));
+  const valid = await provider.validateConfig();
+  if (!valid) {
+    const action = await vscode.window.showErrorMessage(
+      `Code Dictator: ${provider.name} is not configured.`,
+      'Set API Key',
+    );
+    if (action === 'Set API Key') {
+      vscode.commands.executeCommand('codeDictator.setApiKey');
+    }
+    return;
+  }
+
+  try {
+    statusBar.updateState('transcribing');
+
+    // Read the file
+    const audioBuffer = Buffer.from(await fs.promises.readFile(fileUri.fsPath));
+
+    // Transcribe
+    const result = await provider.transcribe(audioBuffer, {
+      language: settings.language || undefined,
+    });
+
+    if (!result.text.trim()) {
+      statusBar.updateState('idle');
+      statusBar.showTransientMessage('$(warning) No speech in file', 2000);
+      return;
+    }
+
+    // Post-process
+    let text = result.text;
+    text = format(text);
+
+    if (settings.codeAwareMode) {
+      text = applyCodeAware(text);
+    }
+
+    if (settings.autoCleanup) {
+      const openaiKey = await storageService.getApiKey('openai');
+      if (openaiKey) {
+        try {
+          text = await llmCleanup(text, openaiKey, settings.cleanupModel);
+        } catch {
+          // Fall through with raw text
+        }
+      } else if (!cleanupKeyWarningShown) {
+        cleanupKeyWarningShown = true;
+        const action = await vscode.window.showWarningMessage(
+          'Auto Cleanup is enabled but no OpenAI API key is configured. Transcriptions will not be cleaned up.',
+          'Set API Key',
+        );
+        if (action === 'Set API Key') {
+          vscode.commands.executeCommand('codeDictator.setApiKey');
+        }
+      }
+    }
+
+    // Inject
+    const destination = await textInjector.inject(
+      text,
+      settings.defaultTarget,
+      settings.autoCopyToClipboard,
+    );
+
+    // Track usage (estimate duration from file size — rough heuristic)
+    const estimatedDurationMs = (audioBuffer.length / 16000) * 1000;
+    await usageTracker.record(result, provider.id, estimatedDurationMs);
+
+    statusBar.updateState('idle');
+    statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);
+
+    const charCount = text.length;
+    statusBar.showTransientMessage(`$(check) File: ${charCount} chars → ${destination}`);
+  } catch (error) {
+    statusBar.updateState('idle');
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.showErrorMessage(`Code Dictator: File transcription failed — ${message}`);
+  }
+}
+
+async function handleShowUsage(): Promise<void> {
+  const stats = usageTracker.getStats();
+
+  const items: vscode.QuickPickItem[] = [
+    {
+      label: '$(calendar) Today',
+      description: `${stats.todayTranscriptions} transcriptions`,
+      detail: `Duration: ${usageTracker.formatDuration(stats.todayDurationMs)} | Cost: ${usageTracker.formatCost(stats.todayEstimatedCost)}`,
+    },
+    {
+      label: '$(calendar) This Week',
+      description: `${stats.weekTranscriptions} transcriptions`,
+      detail: `Duration: ${usageTracker.formatDuration(stats.weekDurationMs)} | Cost: ${usageTracker.formatCost(stats.weekEstimatedCost)}`,
+    },
+    {
+      label: '$(history) All Time',
+      description: `${stats.totalTranscriptions} transcriptions`,
+      detail: `Duration: ${usageTracker.formatDuration(stats.totalDurationMs)} | Cost: ${usageTracker.formatCost(stats.totalEstimatedCost)}`,
+    },
+    {
+      label: '',
+      kind: vscode.QuickPickItemKind.Separator,
+    },
+    {
+      label: '$(book) View History',
+      description: 'Browse past transcriptions',
+    },
+    {
+      label: '$(gear) Open Settings',
+      description: 'Configure Code Dictator',
+    },
+  ];
+
+  const selected = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Code Dictator — Usage & Costs',
+  });
+
+  if (!selected) {
+    return;
+  }
+
+  if (selected.label.includes('View History')) {
+    historyManager.showHistoryQuickPick();
+  } else if (selected.label.includes('Open Settings')) {
+    vscode.commands.executeCommand('codeDictator.openSettings');
+  }
+}
+
+export function deactivate(): void {
+  // All disposables registered via context.subscriptions are automatically disposed
+  // This function handles any additional cleanup if needed
+}

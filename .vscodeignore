@@ -1,0 +1,17 @@
+.vscode/**
+.claude/**
+.github/**
+src/**
+test/**
+node_modules/**
+*.ts
+.gitignore
+.editorconfig
+tsconfig.json
+vitest.config.ts
+eslint.config.mjs
+.eslintrc*
+CLAUDE.md
+*.vsix
+dist/**/*.map
+**/.gitkeep

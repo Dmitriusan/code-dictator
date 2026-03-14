@@ -1,0 +1,266 @@
+{
+  "name": "code-dictator",
+  "displayName": "Code Dictator",
+  "description": "Voice dictation for Claude, Copilot, Codex & Cline — speak instead of type",
+  "version": "1.0.0",
+  "publisher": "irrationalways",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Machine Learning", "Chat"],
+  "keywords": [
+    "voice", "dictation", "speech-to-text", "claude", "copilot",
+    "codex", "cline", "whisper", "elevenlabs", "voice coding",
+    "accessibility", "ai chat", "microphone", "transcription", "speech"
+  ],
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dmitriusan/code-dictator"
+  },
+  "bugs": {
+    "url": "https://github.com/Dmitriusan/code-dictator/issues"
+  },
+  "homepage": "https://irrationalways.com",
+  "author": {
+    "name": "Dmytro Lisnichenko",
+    "url": "https://github.com/Dmitriusan"
+  },
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeDictator.toggleRecording",
+        "title": "Code Dictator: Toggle Voice Recording",
+        "icon": "$(mic)"
+      },
+      {
+        "command": "codeDictator.cancelRecording",
+        "title": "Code Dictator: Cancel Recording"
+      },
+      {
+        "command": "codeDictator.showHistory",
+        "title": "Code Dictator: Show Transcription History",
+        "icon": "$(history)"
+      },
+      {
+        "command": "codeDictator.transcribeFile",
+        "title": "Code Dictator: Transcribe Audio File",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "codeDictator.showUsage",
+        "title": "Code Dictator: Show Usage & Costs",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "codeDictator.selectLanguage",
+        "title": "Code Dictator: Select Language",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "codeDictator.openSettings",
+        "title": "Code Dictator: Open Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "codeDictator.setApiKey",
+        "title": "Code Dictator: Set API Key"
+      },
+      {
+        "command": "codeDictator.configureLanguages",
+        "title": "Code Dictator: Configure Preferred Languages",
+        "icon": "$(globe)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "codeDictator.toggleRecording",
+        "key": "alt+v",
+        "mac": "alt+v"
+      },
+      {
+        "command": "codeDictator.cancelRecording",
+        "key": "escape",
+        "mac": "escape",
+        "when": "codeDictator.isRecording"
+      }
+    ],
+    "configuration": {
+      "title": "Code Dictator",
+      "properties": {
+        "codeDictator.provider": {
+          "type": "string",
+          "default": "elevenlabs",
+          "enum": ["elevenlabs", "openai", "custom"],
+          "enumDescriptions": [
+            "ElevenLabs Scribe v2 — Best accuracy, 90+ languages (recommended)",
+            "OpenAI Whisper — Great alternative with existing OpenAI key",
+            "Custom Whisper-compatible API endpoint"
+          ],
+          "description": "Speech-to-text provider"
+        },
+        "codeDictator.customApiUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Custom Whisper-compatible API endpoint URL (e.g., http://localhost:8000/v1/audio/transcriptions)"
+        },
+        "codeDictator.recordingMode": {
+          "type": "string",
+          "default": "toggle",
+          "enum": ["toggle", "hold"],
+          "enumDescriptions": [
+            "Press once to start recording, press again to stop",
+            "Hold key to record, release to stop and transcribe"
+          ],
+          "description": "Recording activation mode"
+        },
+        "codeDictator.audioIsolation": {
+          "type": "string",
+          "default": "basic",
+          "enum": ["off", "basic", "aggressive"],
+          "enumDescriptions": [
+            "No noise reduction — raw audio",
+            "Browser-native noise suppression and echo cancellation",
+            "Additional filtering (high-pass, low-pass, compressor)"
+          ],
+          "description": "Audio noise reduction level"
+        },
+        "codeDictator.language": {
+          "type": "string",
+          "default": "",
+          "enum": ["", "en", "es", "fr", "de", "pt", "zh", "ja", "ko", "ru", "uk", "pl", "hi", "ar", "tr", "it", "nl", "sv", "da", "fi", "no", "cs", "ro", "hu", "el", "he", "th", "vi", "id", "ms", "bg", "hr", "sk", "sl", "sr", "ca", "ta", "bn"],
+          "enumItemLabels": ["Auto-detect", "English", "Spanish", "French", "German", "Portuguese", "Chinese", "Japanese", "Korean", "Russian", "Ukrainian", "Polish", "Hindi", "Arabic", "Turkish", "Italian", "Dutch", "Swedish", "Danish", "Finnish", "Norwegian", "Czech", "Romanian", "Hungarian", "Greek", "Hebrew", "Thai", "Vietnamese", "Indonesian", "Malay", "Bulgarian", "Croatian", "Slovak", "Slovenian", "Serbian", "Catalan", "Tamil", "Bengali"],
+          "description": "Transcription language. Leave as Auto-detect for automatic language detection."
+        },
+        "codeDictator.preferredLanguages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["en", "es", "fr", "de", "pt", "zh", "ja", "ko", "ru", "uk", "pl", "hi", "ar", "tr", "it", "nl", "sv", "da", "fi", "no", "cs", "ro", "hu", "el", "he", "th", "vi", "id", "ms", "bg", "hr", "sk", "sl", "sr", "ca", "ta", "bn"],
+            "enumItemLabels": ["English", "Spanish", "French", "German", "Portuguese", "Chinese", "Japanese", "Korean", "Russian", "Ukrainian", "Polish", "Hindi", "Arabic", "Turkish", "Italian", "Dutch", "Swedish", "Danish", "Finnish", "Norwegian", "Czech", "Romanian", "Hungarian", "Greek", "Hebrew", "Thai", "Vietnamese", "Indonesian", "Malay", "Bulgarian", "Croatian", "Slovak", "Slovenian", "Serbian", "Catalan", "Tamil", "Bengali"]
+          },
+          "default": [],
+          "description": "Your preferred languages for quick switching. Only these appear in the language picker. Use \"Code Dictator: Configure Languages\" command for a visual picker.",
+          "uniqueItems": true
+        },
+        "codeDictator.autoCleanup": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Clean up transcription with LLM (remove filler words, fix punctuation). **Requires an OpenAI API key** — set one via the `Code Dictator: Set API Key` command (choose OpenAI provider)."
+        },
+        "codeDictator.cleanupModel": {
+          "type": "string",
+          "default": "gpt-4.1-nano",
+          "enum": ["gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1"],
+          "markdownDescription": "LLM model for text cleanup. Smaller models are cheaper and faster; larger models produce better results."
+        },
+        "codeDictator.codeAwareMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Convert spoken code terms to symbols (e.g., 'open paren' → '(')"
+        },
+        "codeDictator.defaultTarget": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "editor", "clipboard"],
+          "enumDescriptions": [
+            "Auto-detect: insert at cursor in focused editor or chat, fall back to clipboard",
+            "Always insert into active editor",
+            "Always copy to clipboard"
+          ],
+          "description": "Where to send transcribed text"
+        },
+        "codeDictator.autoCopyToClipboard": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also copy transcription to clipboard (in addition to primary target)"
+        },
+        "codeDictator.showCostIndicator": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show estimated cost in status bar"
+        },
+        "codeDictator.maxRecordingDuration": {
+          "type": "number",
+          "default": 300,
+          "minimum": 10,
+          "maximum": 3600,
+          "description": "Maximum recording duration in seconds"
+        },
+        "codeDictator.silenceTimeout": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 60,
+          "description": "Auto-stop recording after N seconds of silence (0 = disabled)"
+        }
+      }
+    },
+    "walkthroughs": [
+      {
+        "id": "codeDictator.setup",
+        "title": "Get Started with Code Dictator",
+        "description": "Set up voice dictation for your AI coding assistant in 30 seconds",
+        "steps": [
+          {
+            "id": "chooseProvider",
+            "title": "Choose Your Provider",
+            "description": "Select a speech-to-text provider. We recommend ElevenLabs for best accuracy.\n\n[Open Settings](command:codeDictator.openSettings)",
+            "media": { "markdown": "resources/walkthrough/provider.md" }
+          },
+          {
+            "id": "setApiKey",
+            "title": "Set Your API Key",
+            "description": "Enter your API key securely. It's stored in your OS keychain.\n\n[Set API Key](command:codeDictator.setApiKey)",
+            "media": { "markdown": "resources/walkthrough/apikey.md" }
+          },
+          {
+            "id": "tryRecording",
+            "title": "Try Voice Recording",
+            "description": "Press **Alt+V** or click the mic icon in the status bar to start recording.\n\n[Toggle Recording](command:codeDictator.toggleRecording)",
+            "media": { "markdown": "resources/walkthrough/record.md" }
+          },
+          {
+            "id": "customize",
+            "title": "Customize",
+            "description": "Set your preferred languages, recording mode, and more.\n\n[Open Settings](command:codeDictator.openSettings)",
+            "media": { "markdown": "resources/walkthrough/customize.md" }
+          }
+        ]
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "codeDictator.cancelRecording", "when": "codeDictator.isRecording" }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=es2022 --sourcemap",
+    "compile:prod": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=es2022 --minify",
+    "watch": "npm run compile -- --watch",
+    "build": "npm run compile:prod",
+    "lint": "eslint src --ext ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vscode-test",
+    "package": "npm run build && vsce package",
+    "prepublish": "npm run build",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.4.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0"
+  }
+}
