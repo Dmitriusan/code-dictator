@@ -81,8 +81,8 @@ describe('CodeAware.applyCodeAware()', () => {
     expect(applyCodeAware('not equals')).toBe('!==');
   });
 
-  it('converts "double equals" to "==="', () => {
-    expect(applyCodeAware('double equals')).toBe('===');
+  it('converts "double equals" to "=="', () => {
+    expect(applyCodeAware('double equals')).toBe('==');
   });
 
   it('converts "triple equals" to "==="', () => {

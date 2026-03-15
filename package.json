@@ -8,7 +8,7 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Machine Learning", "Chat"],
+  "categories": ["Machine Learning", "Chat", "Other"],
   "keywords": [
     "voice", "dictation", "speech-to-text", "claude", "copilot",
     "codex", "cline", "whisper", "elevenlabs", "voice coding",
@@ -108,7 +108,7 @@
             "OpenAI Whisper — Great alternative if you already have an API key",
             "Custom Whisper-compatible API endpoint"
           ],
-          "description": "Speech-to-text provider"
+          "description": "Speech-to-text provider. After changing, you will be prompted for an API key on first recording."
         },
         "codeDictator.customApiUrl": {
           "order": 2,
@@ -209,7 +209,7 @@
           "default": 0,
           "minimum": 0,
           "maximum": 60,
-          "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Silence detection requires the webview-based recorder. On Linux systems using arecord as the native recorder, this setting has no effect — use `maxRecordingDuration` instead.*"
+          "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Silence detection requires the webview-based recorder. On Linux systems using arecord as the native recorder, this setting has no effect — use `maxRecordingDuration` instead.*\n\n*Silence detection may not work reliably in noisy environments or with background music — consider using `maxRecordingDuration` as a fallback in those situations.*"
         },
         "codeDictator.showCostIndicator": {
           "order": 14,

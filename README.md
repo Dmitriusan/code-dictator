@@ -2,7 +2,7 @@
 
 Voice dictation for developers — speak code, commands, and prose directly into VS Code.
 
-If you spend your day talking to AI coding assistants, why are you still typing? Press `Alt+D`, say what you mean, and Code Dictator puts the text exactly where you need it — Claude Chat, Copilot Chat, your editor, or any input field. Zero native dependencies. 33KB. Works on macOS, Windows, and Linux.
+If you spend your day talking to AI coding assistants, why are you still typing? Press `Alt+D`, say what you mean, and Code Dictator puts the text exactly where you need it — Claude Chat, Copilot Chat, your editor, or any input field. Transcription returns in seconds. Zero native dependencies. 33KB. Works on macOS, Windows, and Linux.
 
 ---
 
@@ -29,6 +29,10 @@ A professional developer types around 60–80 words per minute. You speak at 150
 | Audio noise reduction | ✓ | ✓ | ✓ |
 | Usage & cost tracking | ✓ | ✓ | ✓ |
 | Native ALSA fallback (Linux) | ✓ | ✓ | ✓ |
+| **Accuracy** | High (Scribe v2) | Good (Whisper) | Model-dependent |
+| **Latency** | ~1–2s | ~1–3s | Varies |
+| **Free tier** | **Yes** | No | N/A |
+| **Best for** | Accuracy, multilingual | Existing OpenAI users | Privacy / air-gapped |
 
 \* AI-powered text cleanup is optional — when enabled, it uses an OpenAI language model and requires a separate OpenAI API key regardless of your speech-to-text provider.
 
@@ -48,19 +52,6 @@ That's it. No system dependencies to install, no microphone configuration, no br
 
 ---
 
-## Provider Comparison
-
-| | ElevenLabs Scribe v2 | OpenAI Whisper | Custom |
-|---|---|---|---|
-| **Accuracy** | High (Scribe v2) | Good (Whisper) | Model-dependent |
-| **Cost per minute** | ~$0.0067 | Per-model pricing | Free (local) |
-| **Latency** | ~1–2s | ~1–3s | Varies |
-| **Languages** | 90+ | 57 | Model-dependent |
-| **Free tier** | **Yes** | No | N/A |
-| **Best for** | Accuracy, multilingual | Existing OpenAI users | Privacy / air-gapped |
-
----
-
 ## Pricing
 
 Code Dictator is free and open-source. You pay only for the speech-to-text API you choose:
@@ -68,11 +59,16 @@ Code Dictator is free and open-source. You pay only for the speech-to-text API y
 | Provider | Cost |
 |---|---|
 | ElevenLabs | **Free tier available**, then ~$0.0067/min (~$0.40/hr) |
+| OpenAI Whisper | Varies by model — see [OpenAI pricing](https://openai.com/api/pricing/) |
 | Custom / Local | Free |
 
-A typical 30-second prompt dictation costs under $0.01. With steady use throughout a workday — 20–40 prompts — expect **$0.05–0.15/day**, or roughly **$1–3 per month**. Most developers spend well under a dollar.
+ElevenLabs' **free plan** includes **10,000 credits/month** — enough for roughly **2.5 hours of transcription**. That comfortably covers most developers' daily use. If you need more, the [Starter plan](https://try.elevenlabs.io/rgoomc9z8dvv) at **$5/month** (30,000 credits) provides 3x the allowance. Check [ElevenLabs pricing](https://try.elevenlabs.io/rgoomc9z8dvv) for current rates.
 
 For context: if you're spending 30–60 minutes a day typing prompts to AI assistants, Code Dictator pays for itself many times over in time saved — even before accounting for reduced hand fatigue.
+
+→ [Sign up for ElevenLabs](https://try.elevenlabs.io/rgoomc9z8dvv) — free tier, no credit card required
+
+*This is a referral link — using it supports Code Dictator's development at no extra cost to you.*
 
 ---
 
@@ -100,7 +96,7 @@ When code-aware mode is enabled (default: on), spoken programming terms convert 
 | `open brace` | `{` |
 | `close brace` | `}` |
 | `arrow function` | `=>` |
-| `double equals` | `===` |
+| `double equals` | `==` |
 | `triple equals` | `===` |
 | `dot` | `.` |
 | `new line` | *(line break)* |
@@ -127,16 +123,6 @@ For deeper cleanup (rephrasing, grammar, context-sensitive detection), enable **
 
 ---
 
-## ElevenLabs
-
-ElevenLabs Scribe v2 offers high transcription accuracy across 90+ languages. **Free tier available — no credit card required** to start.
-
-→ [Sign up for ElevenLabs](https://try.elevenlabs.io/rgoomc9z8dvv)
-
-*This is a referral link — using it supports Code Dictator's development at no extra cost to you.*
-
----
-
 ## All Settings
 
 | Setting | Default | Description |
@@ -150,11 +136,43 @@ ElevenLabs Scribe v2 offers high transcription accuracy across 90+ languages. **
 | `codeDictator.codeAwareMode` | `true` | Spoken-to-symbol conversion |
 | `codeDictator.autoCleanup` | `false` | Optional AI-powered cleanup (requires OpenAI key; basic filler removal is always on) |
 | `codeDictator.cleanupModel` | `gpt-4.1-nano` | OpenAI model for text cleanup |
-| `codeDictator.defaultTarget` | `auto` | `auto`, `editor`, `clipboard` |
+| `codeDictator.defaultTarget` | `clipboard` | `clipboard`, `editor` |
 | `codeDictator.autoCopyToClipboard` | `true` | Also copy to clipboard after insertion |
 | `codeDictator.showCostIndicator` | `true` | Show estimated cost in status bar |
 | `codeDictator.maxRecordingDuration` | `300` | Max recording seconds (10–3600) |
 | `codeDictator.silenceTimeout` | `0` | Auto-stop after N seconds of silence (0 = off) |
+
+---
+
+## How Recording Works
+
+Code Dictator uses a two-tier recording architecture that adapts to each platform's capabilities automatically — no configuration needed.
+
+### Recording Engine
+
+| Platform | Primary Recorder | Fallback |
+|---|---|---|
+| **macOS** | WebView MediaRecorder API | `sox` / `rec` via Homebrew |
+| **Windows** | WebView MediaRecorder API | `sox` (if installed) |
+| **Linux** | WebView MediaRecorder API | `arecord` (ALSA, pre-installed on most distros) |
+
+The extension first attempts to record via a hidden WebView using the browser's [MediaRecorder API](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder). This requires zero native dependencies and works out of the box on macOS and Windows. On Linux, WebView microphone permissions are often sandboxed by the desktop environment — when this happens, the extension automatically detects the permission error and falls back to `arecord` (ALSA), which is pre-installed on virtually all Linux distributions.
+
+The fallback is transparent: you press `Alt+D`, you speak, you get text. The recording path is logged in the Output panel (`Code Dictator`) if you're curious which one is active.
+
+### Adaptive Silence Detection
+
+When `silenceTimeout` is enabled, the extension automatically stops recording after a configurable period of silence. Rather than using a fixed volume threshold (which would fail across different microphones, gain settings, and environments), Code Dictator implements an adaptive Voice Activity Detection (VAD) system:
+
+- Audio is analyzed in the **dBFS** (decibels relative to full scale) domain for perceptually meaningful comparisons
+- Two **exponential moving averages** continuously track the noise floor (slow adaptation) and speech energy (moderate adaptation)
+- The silence threshold is placed **adaptively between noise and speech levels**, so it works whether you're in a quiet studio or a noisy cafe
+- Detection only activates **after speech is first detected**, so pausing to think before speaking won't trigger a premature stop
+- A minimum **signal-to-noise ratio** (6 dB) is required before the system will engage, preventing false triggers when the microphone can't meaningfully distinguish speech from ambient noise
+
+This means zero calibration is needed — the system adapts to your microphone, your voice, and your environment automatically within the first second of speech.
+
+For the full signal processing details, mathematical model, and design rationale, see the [Voice Activity Detection Technical Reference](docs/voice-activity-detection.md).
 
 ---
 

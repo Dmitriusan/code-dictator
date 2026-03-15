@@ -23,7 +23,7 @@ const CODE_TERMS: ReadonlyArray<[string, string]> = [
   ['fat arrow', '=>'],
   ['not equals', '!=='],
   ['not equal', '!=='],
-  ['double equals', '==='],
+  ['double equals', '=='],
   ['triple equals', '==='],
   ['less than or equal', '<='],
   ['greater than or equal', '>='],
