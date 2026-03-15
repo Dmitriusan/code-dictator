@@ -5,7 +5,7 @@ All notable changes to Code Dictator will be documented in this file.
 ## [1.0.0] - 2026-03-14
 
 ### Added
-- Push-to-talk voice recording with configurable toggle/hold modes
+- Push-to-talk voice recording with toggle mode
 - ElevenLabs Scribe v2 integration (recommended provider)
 - OpenAI Whisper integration
 - Custom Whisper-compatible API support

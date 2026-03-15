@@ -331,9 +331,22 @@ async function handleTranscribeFile(): Promise<void> {
     // Read the file
     const audioBuffer = Buffer.from(await fs.promises.readFile(fileUri.fsPath));
 
+    // Derive MIME type from file extension so the STT API receives the correct filename hint
+    const ext = fileUri.fsPath.split('.').pop()?.toLowerCase() ?? '';
+    const extMimeMap: Record<string, string> = {
+      mp3: 'audio/mpeg', mpeg: 'audio/mpeg', mpga: 'audio/mpeg',
+      wav: 'audio/wav',
+      m4a: 'audio/mp4', mp4: 'audio/mp4',
+      ogg: 'audio/ogg',
+      flac: 'audio/flac',
+      webm: 'audio/webm',
+    };
+    const fileMimeType = extMimeMap[ext] ?? 'audio/webm';
+
     // Transcribe
     const result = await provider.transcribe(audioBuffer, {
       language: settings.language || undefined,
+      mimeType: fileMimeType,
     });
 
     if (!result.text.trim()) {

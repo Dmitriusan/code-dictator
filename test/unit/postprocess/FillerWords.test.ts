@@ -108,6 +108,45 @@ describe('removeFillerWords()', () => {
     });
   });
 
+  describe('Chinese (zh) — fullwidth comma ，', () => {
+    it('removes "嗯" with fullwidth commas on both sides', () => {
+      // Pattern 1 with fullwidth commas: ，嗯， → space
+      const result = removeFillerWords('我，嗯，喜欢这个', 'zh');
+      expect(result).not.toContain('嗯');
+      expect(result).not.toContain('，，');
+    });
+
+    it('removes "嗯" at start of sentence followed by fullwidth comma', () => {
+      expect(removeFillerWords('嗯，这很好', 'zh')).toBe('这很好');
+    });
+
+    it('removes "嗯" at start with no following comma', () => {
+      expect(removeFillerWords('嗯这很好', 'zh')).toBe('这很好');
+    });
+  });
+
+  describe('Japanese (ja) — ideographic comma 、', () => {
+    it('removes "えーと" at start followed by 、', () => {
+      expect(removeFillerWords('えーと、次に', 'ja')).toBe('次に');
+    });
+
+    it('removes "あの" with 、 on both sides', () => {
+      const result = removeFillerWords('この、あの、内容', 'ja');
+      expect(result).not.toContain('あの');
+      expect(result).not.toContain('、、');
+    });
+  });
+
+  describe('Korean (ko)', () => {
+    it('removes "어" at start with ASCII comma', () => {
+      expect(removeFillerWords('어, 다음은', 'ko')).toBe('다음은');
+    });
+
+    it('removes "음" with ASCII commas on both sides', () => {
+      expect(removeFillerWords('내용, 음, 다른', 'ko')).toBe('내용 다른');
+    });
+  });
+
   describe('language code normalization', () => {
     it('handles BCP-47 tag (en-US → en)', () => {
       expect(removeFillerWords('Uh hello', 'en-US')).toBe('Hello');

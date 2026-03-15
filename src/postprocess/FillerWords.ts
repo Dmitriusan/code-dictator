@@ -109,17 +109,23 @@ function applyFillerRemoval(text: string, filler: string): string {
   const f = esc(filler);
   let result = text;
 
-  // Pattern 1: ", filler," → " " — both commas are hesitation artifacts from the STT engine
-  result = result.replace(new RegExp(`,\\s*${f}\\s*,`, 'gi'), ' ');
+  // Pattern 1: ", filler," → " " — both ASCII and CJK fullwidth commas
+  result = result.replace(new RegExp(`[,，、]\\s*${f}\\s*[,，、]`, 'gi'), ' ');
 
   if (isAsciiOnly(filler)) {
     // ASCII filler: \b word boundaries prevent matching inside words (e.g. "er" in "user")
     result = result.replace(new RegExp(`\\b${f}\\b[,.]?\\s*`, 'gi'), ' ');
   } else {
-    // Non-ASCII (Cyrillic, CJK, Arabic, etc.): use space/punctuation boundaries
+    // Non-ASCII (Cyrillic, CJK, Arabic, etc.): two patterns to cover all positions.
     const punct = `[\\s，。！？、…；：（），.!?:;]`;
+
+    // Start-of-text: consume filler + any trailing comma/punct/space.
+    // No lookahead needed — nothing precedes the filler.
+    result = result.replace(new RegExp(`^${f}[,.，、。]?\\s*`, 'gi'), '');
+
+    // Mid-sentence: filler is preceded AND followed by punct or end-of-string.
     result = result.replace(
-      new RegExp(`(?:^|(?<=${punct}))${f}[,.]?(?=${punct}|$)`, 'gi'),
+      new RegExp(`(?<=${punct})${f}[,.，、。]?(?=${punct}|$)`, 'gi'),
       ' ',
     );
   }
@@ -152,8 +158,10 @@ export function removeFillerWords(text: string, languageCode: string): string {
     result = applyFillerRemoval(result, filler);
   }
 
-  // Clean up double commas and extra spaces left by removals
+  // Clean up double commas (ASCII and CJK fullwidth) left by removals
   result = result.replace(/,\s*,/g, ',');
+  result = result.replace(/，\s*，/g, '，');
+  result = result.replace(/、\s*、/g, '、');
   result = result.replace(/ {2,}/g, ' ').trim();
 
   // Re-capitalize if filler removal exposed a lowercase start

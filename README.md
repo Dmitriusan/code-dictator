@@ -10,7 +10,7 @@ Stop typing prompts. Press `Alt+D`, say what you mean, and Code Dictator puts th
 
 | Mode / Capability | ElevenLabs | OpenAI Whisper | Custom |
 |---|---|---|---|
-| Dictate (toggle or hold-to-talk) | ✓ | ✓ | ✓ |
+| Dictate (push-to-talk toggle) | ✓ | ✓ | ✓ |
 | Code-aware symbol conversion | ✓ | ✓ | ✓ |
 | Transcribe audio file | ✓ | ✓ | ✓ |
 | Language auto-detect | ✓ (90+ langs) | ✓ (57 langs) | model-dependent |
@@ -76,7 +76,7 @@ When code-aware mode is enabled (default: on), spoken programming terms convert 
 | `open brace` | `{` |
 | `close brace` | `}` |
 | `arrow function` | `=>` |
-| `double equals` | `==` |
+| `double equals` | `===` |
 | `triple equals` | `===` |
 | `dot` | `.` |
 | `new line` | *(line break)* |
@@ -134,7 +134,7 @@ A typical 30-second prompt dictation costs under $0.01.
 |---|---|---|
 | `codeDictator.provider` | `elevenlabs` | `elevenlabs`, `openai`, `custom` |
 | `codeDictator.customApiUrl` | *(empty)* | Whisper-compatible endpoint URL |
-| `codeDictator.recordingMode` | `toggle` | `toggle` (press twice) or `hold` (hold key) |
+| `codeDictator.recordingMode` | `toggle` | `toggle` (press once to start, once to stop) |
 | `codeDictator.audioIsolation` | `basic` | `off`, `basic`, `aggressive` |
 | `codeDictator.language` | *(auto)* | ISO 639-1 code or leave blank for auto-detect |
 | `codeDictator.preferredLanguages` | `[]` | Shortlist for the language picker |
@@ -188,5 +188,7 @@ Open an issue first to discuss what you'd like to change. PRs welcome.
 MIT — see [LICENSE](LICENSE) for details.
 
 ---
+
+If you find Code Dictator useful, consider [buying me a coffee](https://buymeacoffee.com/dmitriusan).
 
 Built by [Dmytro Lisnichenko](https://github.com/Dmitriusan) · [irrationalways.com](https://irrationalways.com)
