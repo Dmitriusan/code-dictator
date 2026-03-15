@@ -1,7 +1,7 @@
 {
   "name": "code-dictator",
   "displayName": "Code Dictator",
-  "description": "Voice dictation for AI coding assistants — dictate prompts to Claude, Copilot, Codex & Cline from your desk, your kitchen, or your treadmill",
+  "description": "Voice dictation for VS Code — speak instead of type. Press Alt+D, talk, paste into Claude, Copilot, Cursor or any AI chat. Zero dependencies, 37 languages.",
   "version": "1.0.0",
   "publisher": "irrationalways",
   "license": "MIT",
@@ -10,9 +10,9 @@
   },
   "categories": ["Machine Learning", "Chat", "Other"],
   "keywords": [
-    "voice", "dictation", "speech-to-text", "claude", "copilot",
-    "voice coding", "whisper", "elevenlabs", "push-to-talk", "voice input",
-    "accessibility", "ai chat", "microphone", "transcription", "hands-free"
+    "voice", "dictation", "speech-to-text", "voice coding", "push-to-talk",
+    "whisper", "transcription", "microphone", "hands-free", "accessibility",
+    "claude", "copilot", "cursor", "windsurf", "cline"
   ],
   "icon": "resources/icon.png",
   "repository": {
