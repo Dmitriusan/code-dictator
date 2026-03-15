@@ -330,7 +330,7 @@ async function handleStopAndTranscribe(): Promise<void> {
     // Silent feedback via status bar — no popups to interrupt the dictate→review→dictate flow
     const charCount = text.length;
     const duration = Math.round(audioPayload.durationMs / 1000);
-    statusBar.showTransientMessage(`$(check) ${charCount} chars, ${duration}s → ${destination}`);
+    statusBar.showTransientMessage(`$(check) ${charCount} chars, ${duration}s → ${destination}`, 5000, true);
   } catch (error) {
     statusBar.updateState('idle');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
@@ -450,7 +450,7 @@ async function handleTranscribeFile(): Promise<void> {
     statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);
 
     const charCount = text.length;
-    statusBar.showTransientMessage(`$(check) File: ${charCount} chars → ${destination}`);
+    statusBar.showTransientMessage(`$(check) File: ${charCount} chars → ${destination}`, 5000, true);
   } catch (error) {
     statusBar.updateState('idle');
     const message = error instanceof Error ? error.message : String(error);

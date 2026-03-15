@@ -46,6 +46,7 @@ export class StatusBar implements vscode.Disposable {
         this.micButton.text = '$(mic) Dictator';
         this.micButton.tooltip = 'Code Dictator: Click to start recording (Alt+D)';
         this.micButton.backgroundColor = undefined;
+        this.micButton.color = undefined;
         this.micButton.show();
         break;
 
@@ -99,15 +100,22 @@ export class StatusBar implements vscode.Disposable {
   /**
    * Show a brief success message in the mic button, then revert to idle.
    * Non-intrusive — no popup, no modal, just a status bar flash.
+   *
+   * When `success` is true the button text turns green for the duration,
+   * giving a clear at-a-glance "done" signal without needing to read the text.
    */
-  showTransientMessage(text: string, durationMs = 3000): void {
+  showTransientMessage(text: string, durationMs = 3000, success = false): void {
     if (this.transientTimer) {
       clearTimeout(this.transientTimer);
     }
     this.micButton.text = text;
     this.micButton.backgroundColor = undefined;
+    this.micButton.color = success
+      ? new vscode.ThemeColor('testing.iconPassed')
+      : undefined;
     this.transientTimer = setTimeout(() => {
       this.transientTimer = undefined;
+      this.micButton.color = undefined;
       this.updateState('idle');
     }, durationMs);
   }
