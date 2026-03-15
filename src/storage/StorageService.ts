@@ -24,17 +24,25 @@ interface StoredUsage {
   weekEstimatedCost: number;
 }
 
-function getISODate(): string {
-  return new Date().toISOString().slice(0, 10);
+/** Local-time date string YYYY-MM-DD (not UTC — avoids timezone mismatch). */
+function getLocalDate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
+/** Local-time Monday of the current week as YYYY-MM-DD. */
 function getWeekStart(): string {
   const now = new Date();
   const day = now.getDay();
   const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Monday
-  const monday = new Date(now);
-  monday.setDate(diff);
-  return monday.toISOString().slice(0, 10);
+  const monday = new Date(now.getFullYear(), now.getMonth(), diff);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, '0');
+  const d = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export class StorageService {
@@ -102,7 +110,7 @@ export class StorageService {
       };
     }
 
-    const today = getISODate();
+    const today = getLocalDate();
     const weekStart = getWeekStart();
     const storedDate = this.context.globalState.get<string>(USAGE_DATE_KEY, '');
     const storedWeek = this.context.globalState.get<string>(USAGE_WEEK_KEY, '');
@@ -127,7 +135,7 @@ export class StorageService {
   }
 
   async recordUsage(durationMs: number, estimatedCost: number): Promise<void> {
-    const today = getISODate();
+    const today = getLocalDate();
     const weekStart = getWeekStart();
     const storedDate = this.context.globalState.get<string>(USAGE_DATE_KEY, '');
     const storedWeek = this.context.globalState.get<string>(USAGE_WEEK_KEY, '');

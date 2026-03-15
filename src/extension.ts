@@ -472,9 +472,12 @@ async function handleTranscribeFile(): Promise<void> {
       settings.autoCopyToClipboard,
     );
 
-    // Track usage (estimate duration from file size — rough heuristic)
-    const estimatedDurationMs = (audioBuffer.length / 16000) * 1000;
-    await usageTracker.record(result, provider.id, estimatedDurationMs);
+    // Prefer the provider-returned duration (seconds) over the raw buffer heuristic,
+    // which assumes 16-bit mono 16 kHz PCM and is wildly off for compressed formats.
+    const durationMs = result.duration != null
+      ? result.duration * 1000
+      : (audioBuffer.length / 32) * 1000;   // fallback: 16-bit 16 kHz = 32 bytes/ms
+    await usageTracker.record(result, provider.id, durationMs);
 
     statusBar.updateState('idle');
     statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);

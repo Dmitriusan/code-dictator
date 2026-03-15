@@ -112,6 +112,7 @@ export class NativeRecorder {
     return new Promise((resolve, reject) => {
       try {
         this.stderrData = '';
+        let settled = false;
         this.process = spawn(tool.command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
         diagLog('NativeRecorder', `Spawned ${tool.command} ${args.join(' ')}`);
 
@@ -138,12 +139,22 @@ export class NativeRecorder {
 
         this.process.on('error', (err) => {
           diagLog('NativeRecorder', `Process error: ${err.message}`);
+          settled = true;
           this.cleanup();
           reject(new Error(`Failed to start recording: ${err.message}`));
         });
 
-        // Detect unexpected process exit during active recording
+        // Detect process exit — if it happens before the startup timer,
+        // reject the promise instead of leaving _isRecording in a zombie state.
         this.process.on('close', (code, signal) => {
+          if (!settled && !this._isRecording) {
+            // Process exited during startup (before the 150ms timer)
+            settled = true;
+            diagLog('NativeRecorder', `Process exited during startup. code=${code}, signal=${signal}, stderr=${this.stderrData.trim()}`);
+            this.cleanup();
+            reject(new Error(`Recording process exited immediately (code=${code}). ${this.stderrData.trim()}`));
+            return;
+          }
           if (this._isRecording && !this.stoppingGracefully) {
             const elapsed = Math.round((Date.now() - this.startTime) / 1000);
             diagLog('NativeRecorder', `Process exited unexpectedly after ${elapsed}s. code=${code}, signal=${signal}, stderr=${this.stderrData.trim()}`);
@@ -156,7 +167,8 @@ export class NativeRecorder {
 
         // Give it a moment to start
         setTimeout(() => {
-          if (this.process && !this.process.killed) {
+          if (!settled && this.process && !this.process.killed) {
+            settled = true;
             this._isRecording = true;
             this.startTime = Date.now();
             diagLog('NativeRecorder', `Recording started with ${tool.name}, silenceTimeout=${silenceTimeout}s`);
