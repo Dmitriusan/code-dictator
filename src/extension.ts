@@ -25,6 +25,13 @@ let historyManager: HistoryManager;
 let textInjector: TextInjector;
 let holdController: HoldModeController;
 let cleanupKeyWarningShown = false;
+/** Tracks the in-flight handleStartRecording() promise so hold-release can wait for it. */
+let startRecordingPromise: Promise<void> | null = null;
+/**
+ * Guards against concurrent recording state transitions.
+ * Set while a start/stop operation is in flight so rapid Alt+D presses are ignored.
+ */
+let isTransitioning = false;
 
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize services
@@ -38,8 +45,18 @@ export function activate(context: vscode.ExtensionContext): void {
   holdController = new HoldModeController();
 
   // Wire hold-mode callbacks
-  holdController.onStart(() => handleStartRecording());
-  holdController.onRelease(() => {
+  holdController.onStart(() => {
+    const p = handleStartRecording();
+    startRecordingPromise = p;
+    p.finally(() => { if (startRecordingPromise === p) { startRecordingPromise = null; } });
+  });
+  holdController.onRelease(async () => {
+    // If recording startup is still in flight, wait for it before stopping.
+    // This prevents the race where stop arrives before the webview's
+    // MediaRecorder has initialised.
+    if (startRecordingPromise) {
+      await startRecordingPromise;
+    }
     if (recorder.isRecording) {
       handleStopAndTranscribe();
     }
@@ -68,16 +85,18 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     recorder.onSilenceDetected(() => {
-      // Auto-stop on silence if the user has configured it
-      if (recorder.isRecording) {
-        handleStopAndTranscribe();
+      // Auto-stop on silence / max duration — respect the transition lock
+      // so this doesn't race with a concurrent user toggle press.
+      if (recorder.isRecording && !isTransitioning) {
+        isTransitioning = true;
+        handleStopAndTranscribe().finally(() => { isTransitioning = false; });
       }
     }),
   );
 
   // Register commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('codeDictator.toggleRecording', () => {
+    vscode.commands.registerCommand('codeDictator.toggleRecording', async () => {
       const settings = storageService.getSettings();
 
       if (settings.recordingMode === 'hold') {
@@ -86,11 +105,22 @@ export function activate(context: vscode.ExtensionContext): void {
         // stop (key released), the controller fires the release callback.
         holdController.handleKeyDown();
       } else {
-        // Toggle mode: explicit start/stop on each press
-        if (recorder.isRecording) {
-          handleStopAndTranscribe();
-        } else {
-          handleStartRecording();
+        // Toggle mode: serialize start/stop — ignore rapid presses while
+        // a state transition is in flight.
+        if (isTransitioning) {
+          diagLog('Extension', 'Toggle ignored: state transition in progress');
+          return;
+        }
+
+        isTransitioning = true;
+        try {
+          if (recorder.isRecording) {
+            await handleStopAndTranscribe();
+          } else {
+            await handleStartRecording();
+          }
+        } finally {
+          isTransitioning = false;
         }
       }
     }),
@@ -295,7 +325,7 @@ async function handleStopAndTranscribe(): Promise<void> {
         diagLog('Extension', 'Starting AI cleanup with model=' + settings.cleanupModel);
         statusBar.updateState('cleaning');
         try {
-          text = await llmCleanup(text, cleanupKey, settings.cleanupModel);
+          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages);
           diagLog('Extension', 'AI cleanup complete');
         } catch (error) {
           console.warn('Code Dictator: AI cleanup failed, using raw text', error);
@@ -330,7 +360,7 @@ async function handleStopAndTranscribe(): Promise<void> {
     // Silent feedback via status bar — no popups to interrupt the dictate→review→dictate flow
     const charCount = text.length;
     const duration = Math.round(audioPayload.durationMs / 1000);
-    statusBar.showTransientMessage(`$(check) ${charCount} chars, ${duration}s → ${destination}`, 5000, true);
+    statusBar.showTransientMessage(`$(check) ${charCount} chars, ${duration}s → ${destination}`, undefined, true);
   } catch (error) {
     statusBar.updateState('idle');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
@@ -419,7 +449,7 @@ async function handleTranscribeFile(): Promise<void> {
       if (cleanupKey) {
         statusBar.updateState('cleaning');
         try {
-          text = await llmCleanup(text, cleanupKey, settings.cleanupModel);
+          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages);
         } catch {
           // Fall through with raw text
         }
@@ -450,7 +480,7 @@ async function handleTranscribeFile(): Promise<void> {
     statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);
 
     const charCount = text.length;
-    statusBar.showTransientMessage(`$(check) File: ${charCount} chars → ${destination}`, 5000, true);
+    statusBar.showTransientMessage(`$(check) File: ${charCount} chars → ${destination}`, undefined, true);
   } catch (error) {
     statusBar.updateState('idle');
     const message = error instanceof Error ? error.message : String(error);

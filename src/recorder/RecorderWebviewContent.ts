@@ -282,11 +282,14 @@ export function getRecorderWebviewContent(nonce: string): string {
           }, 200);
         }
 
-        // Max duration enforcement
+        // Max duration enforcement — signal the extension to stop properly
+        // (via silenceDetected) instead of stopping MediaRecorder directly,
+        // so the audio data flows through handleStopAndTranscribe().
         if (maxDuration > 0) {
           maxDurationTimeout = setTimeout(() => {
             if (mediaRecorder && mediaRecorder.state === 'recording') {
-              mediaRecorder.stop();
+              vscode.postMessage({ type: 'diagnosticLog', message: 'Max duration reached (' + maxDuration + 's), signaling extension to stop' });
+              vscode.postMessage({ type: 'silenceDetected' });
             }
           }, maxDuration * 1000);
         }
@@ -313,6 +316,12 @@ export function getRecorderWebviewContent(nonce: string): string {
         mediaRecorder.stop();
         vscode.postMessage({ type: 'recordingStopped' });
         updateStatus('Processing...', false);
+      } else {
+        // MediaRecorder not ready or already stopped — report back so the
+        // extension host doesn't wait 30s for audioData that will never come.
+        const state = mediaRecorder ? mediaRecorder.state : 'null';
+        vscode.postMessage({ type: 'diagnosticLog', message: 'stopRecording called but MediaRecorder state=' + state });
+        vscode.postMessage({ type: 'recordingError', message: 'Recording was not active (MediaRecorder state: ' + state + ')' });
       }
     }
 

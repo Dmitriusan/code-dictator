@@ -62,6 +62,10 @@ export class RecorderManager implements vscode.Disposable {
       return;
     }
 
+    // Claim recording state immediately to prevent concurrent startRecording()
+    // calls from racing through the ensurePanel() async gap (TOCTOU fix).
+    this._isRecording = true;
+
     // Primary: webview MediaRecorder (uses PulseAudio/PipeWire, works everywhere)
     diagLog('RecorderManager', 'Trying webview recorder path');
     try {
@@ -70,7 +74,7 @@ export class RecorderManager implements vscode.Disposable {
       // Start recording with a short timeout to detect permission errors quickly.
       // We intercept errors via permissionErrorHandler so they don't reach external
       // onError listeners (which would show an error popup before the fallback runs).
-      const startResult = await new Promise<void>((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         this.permissionErrorHandler = (msg: string) => {
           if (msg.includes('permission denied') || msg.includes('Permission denied') ||
               msg.includes('NotAllowedError') || msg.includes('Microphone') ||
@@ -86,7 +90,7 @@ export class RecorderManager implements vscode.Disposable {
           maxDuration,
         };
         this.panel!.webview.postMessage(message);
-        this._isRecording = true;
+        // _isRecording already set above — no duplicate needed
 
         // Give the webview 2s to fail or succeed
         setTimeout(() => {
@@ -94,7 +98,6 @@ export class RecorderManager implements vscode.Disposable {
           resolve();
         }, 2000);
       });
-      return startResult;
     } catch (webviewError) {
       // Webview mic permission failed — try native fallback (arecord/sox)
       this.permissionErrorHandler = undefined;
@@ -159,6 +162,10 @@ export class RecorderManager implements vscode.Disposable {
     if (!this._isRecording || !this.panel) {
       throw new Error('Not currently recording');
     }
+
+    // Mark as not-recording immediately to prevent a concurrent stopRecording()
+    // call from entering this code path and overwriting audioDataResolve/Reject.
+    this._isRecording = false;
 
     return new Promise<AudioDataPayload>((resolve, reject) => {
       this.audioDataResolve = resolve;
@@ -355,7 +362,10 @@ export class RecorderManager implements vscode.Disposable {
         break;
       }
       case 'recordingStarted': {
-        this._isRecording = true;
+        // Note: _isRecording is already set at the top of startRecording()
+        // (before ensurePanel). Do NOT set it here — a late-arriving
+        // recordingStarted (e.g. slow getUserMedia finishing after a stop/cancel)
+        // would resurrect the flag and leave the extension in an inconsistent state.
         this.emit('recordingStarted');
         break;
       }

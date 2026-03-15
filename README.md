@@ -178,6 +178,9 @@ For the full signal processing details, mathematical model, and design rationale
 
 ## Troubleshooting
 
+**Why isn't there a microphone button inside AI chat windows?**
+VS Code's Extension API does not allow extensions to inject buttons, icons, or any custom UI into another extension's chat panel. Each extension's views are sandboxed — there is no API for a third-party extension to modify the Claude, Copilot, or any other chat interface. This is a VS Code platform limitation, not something any extension can work around. The keyboard shortcut (`Alt+D`) and the status bar microphone button work universally across all contexts — just click into the chat input, press `Alt+D`, and speak. No in-panel button needed.
+
 **Microphone not detected**
 - macOS: System Settings → Privacy & Security → Microphone → enable VS Code
 - Windows: Settings → Privacy → Microphone → allow app access

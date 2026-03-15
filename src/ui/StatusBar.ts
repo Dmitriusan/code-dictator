@@ -80,11 +80,10 @@ export class StatusBar implements vscode.Disposable {
     if (languageCode) {
       this.languageIndicator.text = `$(globe) ${languageCode.toUpperCase()}`;
       this.languageIndicator.tooltip = `Code Dictator: Language — ${languageCode}. Click to change.`;
+      this.languageIndicator.show();
     } else {
-      this.languageIndicator.text = '$(globe) AUTO';
-      this.languageIndicator.tooltip = 'Code Dictator: Auto-detect language. Click to change.';
+      this.languageIndicator.hide();
     }
-    this.languageIndicator.show();
   }
 
   updateCost(text: string, showCost: boolean): void {
@@ -101,28 +100,43 @@ export class StatusBar implements vscode.Disposable {
    * Show a brief success message in the mic button, then revert to idle.
    * Non-intrusive — no popup, no modal, just a status bar flash.
    *
-   * When `success` is true the button text turns green for the duration,
-   * giving a clear at-a-glance "done" signal without needing to read the text.
+   * When `success` is true the button turns green for the duration
+   * (text-only or solid background, depending on `successFlashBackground` setting).
+   * Duration is controlled by the `successFlashDuration` setting.
    */
   showTransientMessage(text: string, durationMs = 3000, success = false): void {
     if (this.transientTimer) {
       clearTimeout(this.transientTimer);
     }
+
+    const config = vscode.workspace.getConfiguration('codeDictator');
+
+    if (success) {
+      durationMs = (config.get<number>('successFlashDuration') ?? 5) * 1000;
+      const useBackground = config.get<boolean>('successFlashBackground') ?? false;
+      if (useBackground) {
+        this.micButton.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+        this.micButton.color = undefined;
+      } else {
+        this.micButton.backgroundColor = undefined;
+        this.micButton.color = new vscode.ThemeColor('testing.iconPassed');
+      }
+    } else {
+      this.micButton.backgroundColor = undefined;
+      this.micButton.color = undefined;
+    }
+
     this.micButton.text = text;
-    this.micButton.backgroundColor = undefined;
-    this.micButton.color = success
-      ? new vscode.ThemeColor('testing.iconPassed')
-      : undefined;
     this.transientTimer = setTimeout(() => {
       this.transientTimer = undefined;
       this.micButton.color = undefined;
+      this.micButton.backgroundColor = undefined;
       this.updateState('idle');
     }, durationMs);
   }
 
   show(): void {
     this.micButton.show();
-    this.languageIndicator.show();
   }
 
   hide(): void {

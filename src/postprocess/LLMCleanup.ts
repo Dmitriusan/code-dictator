@@ -1,6 +1,8 @@
+import { LANGUAGES } from '../types';
+
 const OPENAI_CHAT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-4.1-nano';
-const SYSTEM_PROMPT = `You are a speech-to-text post-processor for developer dictation. Clean up the transcribed text:
+const BASE_SYSTEM_PROMPT = `You are a speech-to-text post-processor for developer dictation. Clean up the transcribed text:
 
 1. Remove spurious commas that speech-to-text engines insert at speech pauses. Example: "Check out the, project, folder" → "Check out the project folder". Keep only grammatically correct commas (lists, clauses, "Also, …").
 2. Remove any remaining filler words (um, uh, like, you know, basically, sort of).
@@ -9,6 +11,22 @@ const SYSTEM_PROMPT = `You are a speech-to-text post-processor for developer dic
 5. KEEP the text in the SAME language as the input. Never translate to another language.
 
 Output ONLY the cleaned text, nothing else.`;
+
+function buildSystemPrompt(preferredLanguages?: string[]): string {
+  if (!preferredLanguages || preferredLanguages.length === 0) {
+    return BASE_SYSTEM_PROMPT;
+  }
+
+  // Always include English
+  const langCodes = new Set(preferredLanguages);
+  langCodes.add('en');
+
+  const langNames = [...langCodes]
+    .map(code => LANGUAGES.find(l => l.code === code)?.name)
+    .filter(Boolean);
+
+  return BASE_SYSTEM_PROMPT + `\n6. The output text MUST be in one of these languages: ${langNames.join(', ')}. Do not produce text in any other language. Code snippets and technical terms are exempt from this rule.`;
+}
 
 /**
  * Clean up transcribed text using an LLM to remove filler words,
@@ -19,6 +37,7 @@ export async function cleanup(
   text: string,
   apiKey: string,
   model?: string,
+  preferredLanguages?: string[],
 ): Promise<string> {
   if (!text.trim()) {
     return text;
@@ -40,7 +59,7 @@ export async function cleanup(
       body: JSON.stringify({
         model: requestModel,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: buildSystemPrompt(preferredLanguages) },
           { role: 'user', content: text },
         ],
         temperature: 0.1,

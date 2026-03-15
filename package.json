@@ -111,13 +111,13 @@
           "description": "Speech-to-text provider. After changing, you will be prompted for an API key on first recording."
         },
         "codeDictator.customApiUrl": {
-          "order": 2,
+          "order": 16,
           "type": "string",
           "default": "",
           "description": "Custom Whisper-compatible API endpoint URL (e.g., http://localhost:8000/v1/audio/transcriptions)"
         },
         "codeDictator.language": {
-          "order": 3,
+          "order": 2,
           "type": "string",
           "default": "",
           "enum": ["", "en", "es", "fr", "de", "pt", "zh", "ja", "ko", "ru", "uk", "pl", "hi", "ar", "tr", "it", "nl", "sv", "da", "fi", "no", "cs", "ro", "hu", "el", "he", "th", "vi", "id", "ms", "bg", "hr", "sk", "sl", "sr", "ca", "ta", "bn"],
@@ -125,7 +125,7 @@
           "description": "Transcription language. Leave as Auto-detect for automatic language detection."
         },
         "codeDictator.preferredLanguages": {
-          "order": 4,
+          "order": 10,
           "type": "array",
           "items": {
             "type": "string",
@@ -137,7 +137,7 @@
           "uniqueItems": true
         },
         "codeDictator.recordingMode": {
-          "order": 5,
+          "order": 3,
           "type": "string",
           "default": "toggle",
           "enum": ["toggle", "hold"],
@@ -148,7 +148,7 @@
           "description": "Recording activation mode"
         },
         "codeDictator.defaultTarget": {
-          "order": 6,
+          "order": 4,
           "type": "string",
           "default": "clipboard",
           "enum": ["clipboard", "editor"],
@@ -159,13 +159,13 @@
           "description": "Where to send transcribed text"
         },
         "codeDictator.autoCopyToClipboard": {
-          "order": 7,
+          "order": 5,
           "type": "boolean",
           "default": true,
           "description": "Also copy transcription to clipboard (in addition to primary target)"
         },
         "codeDictator.audioIsolation": {
-          "order": 8,
+          "order": 6,
           "type": "string",
           "default": "basic",
           "enum": ["off", "basic", "aggressive"],
@@ -177,19 +177,19 @@
           "description": "Audio noise reduction level"
         },
         "codeDictator.codeAwareMode": {
-          "order": 9,
+          "order": 7,
           "type": "boolean",
           "default": true,
           "description": "Convert spoken code terms to symbols (e.g., 'open paren' → '(')"
         },
         "codeDictator.autoCleanup": {
-          "order": 10,
+          "order": 8,
           "type": "boolean",
           "default": false,
           "markdownDescription": "Use an AI language model to further clean up transcriptions (rephrase, fix grammar, remove context-sensitive fillers). **Requires an OpenAI API key** — [Set Cleanup API Key](command:codeDictator.setCleanupApiKey).\n\n*Note: Basic filler removal (uh, um, äh, ну, etc.) is always active — language-aware and free, no API needed.*"
         },
         "codeDictator.cleanupModel": {
-          "order": 11,
+          "order": 9,
           "type": "string",
           "default": "gpt-4.1-nano",
           "enum": ["gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1"],
@@ -204,7 +204,7 @@
           "description": "Maximum recording duration in seconds"
         },
         "codeDictator.silenceTimeout": {
-          "order": 13,
+          "order": 11,
           "type": "number",
           "default": 0,
           "minimum": 0,
@@ -212,13 +212,27 @@
           "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Silence detection requires the webview-based recorder. On Linux systems using arecord as the native recorder, this setting has no effect — use `maxRecordingDuration` instead.*\n\n*Silence detection may not work reliably in noisy environments or with background music — consider using `maxRecordingDuration` as a fallback in those situations.*"
         },
         "codeDictator.showCostIndicator": {
-          "order": 14,
+          "order": 13,
           "type": "boolean",
           "default": true,
           "description": "Show estimated cost in status bar"
         },
-        "codeDictator.diagnosticLogging": {
+        "codeDictator.successFlashDuration": {
+          "order": 14,
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 30,
+          "description": "How many seconds the green success indicator stays visible after transcription completes"
+        },
+        "codeDictator.successFlashBackground": {
           "order": 15,
+          "type": "boolean",
+          "default": false,
+          "description": "Use a solid green background for the success indicator instead of green text"
+        },
+        "codeDictator.diagnosticLogging": {
+          "order": 17,
           "type": "boolean",
           "default": false,
           "markdownDescription": "Log recording diagnostics to the **Code Dictator** output channel. Enable this if recordings stop unexpectedly or you need to troubleshoot microphone issues."

@@ -6,19 +6,25 @@
  * keydown events. When repeats stop arriving, a debounce timer fires and
  * we treat that as "key released".
  *
- * Typical OS key-repeat intervals are 30–100ms, so a 250ms debounce window
- * reliably distinguishes "still holding" from "released".
+ * Two-phase debounce:
+ * - Initial phase (before first repeat): 800ms — must be longer than the OS
+ *   key-repeat delay (typically 500–660ms on Linux, ~500ms on macOS/Windows).
+ * - After first repeat detected: 300ms — key repeats arrive every 30–100ms,
+ *   so 300ms reliably detects when they stop.
  */
 export class HoldModeController {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private _isHolding = false;
-  private readonly debounceMs: number;
+  private repeatDetected = false;
+  private readonly initialDebounceMs: number;
+  private readonly repeatDebounceMs: number;
 
   private onStartCallback: (() => void) | null = null;
   private onReleaseCallback: (() => void) | null = null;
 
-  constructor(debounceMs = 250) {
-    this.debounceMs = debounceMs;
+  constructor(initialDebounceMs = 800, repeatDebounceMs = 300) {
+    this.initialDebounceMs = initialDebounceMs;
+    this.repeatDebounceMs = repeatDebounceMs;
   }
 
   /** Register callback for when hold begins (first keydown). */
@@ -50,18 +56,25 @@ export class HoldModeController {
     if (!this._isHolding) {
       // First press — start recording
       this._isHolding = true;
+      this.repeatDetected = false;
       this.onStartCallback?.();
+    } else {
+      // Subsequent keydown while holding — OS key-repeat is working
+      this.repeatDetected = true;
     }
 
-    // (Re)start the debounce timer — if no more keydowns arrive within
-    // debounceMs, we treat it as key released.
+    // Use a longer timeout before the first repeat arrives (must exceed the
+    // OS key-repeat delay), then switch to a shorter one once we know
+    // repeats are flowing.
+    const timeoutMs = this.repeatDetected ? this.repeatDebounceMs : this.initialDebounceMs;
+
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
       if (this._isHolding) {
         this._isHolding = false;
         this.onReleaseCallback?.();
       }
-    }, this.debounceMs);
+    }, timeoutMs);
   }
 
   /**
@@ -74,6 +87,7 @@ export class HoldModeController {
       this.debounceTimer = null;
     }
     this._isHolding = false;
+    this.repeatDetected = false;
   }
 
   dispose(): void {
