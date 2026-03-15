@@ -1,7 +1,13 @@
 const OPENAI_CHAT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-4.1-nano';
-const SYSTEM_PROMPT =
-  'You are a speech-to-text post-processor. Clean up the transcribed text: remove filler words (um, uh, like, you know), fix punctuation, add paragraph breaks. Output ONLY the cleaned text, nothing else.';
+const SYSTEM_PROMPT = `You are a speech-to-text post-processor for developer dictation. Clean up the transcribed text:
+
+1. Remove spurious commas that speech-to-text engines insert at speech pauses. Example: "Check out the, project, folder" → "Check out the project folder". Keep only grammatically correct commas (lists, clauses, "Also, …").
+2. Remove any remaining filler words (um, uh, like, you know, basically, sort of).
+3. Fix punctuation and capitalization.
+4. Do NOT rephrase, summarize, or add words — preserve the speaker's exact meaning and vocabulary.
+
+Output ONLY the cleaned text, nothing else.`;
 
 /**
  * Clean up transcribed text using an LLM to remove filler words,

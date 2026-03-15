@@ -20,6 +20,10 @@ export function format(text: string): string {
   // Remove stutter patterns: "u-uh", "m-uh", "b-um" (letter(s)-filler)
   result = result.replace(/\b\w+-(?:uh|um|ah)\b[,.]?\s*/gi, '');
 
+  // Remove false starts / self-corrections: "the-- some" → "some".
+  // STT engines use double-dash when the speaker abandons a word mid-utterance.
+  result = result.replace(/\w+--[,.]?\s*/g, '');
+
   // --- Formatting ---
 
   // Collapse multiple spaces into one
@@ -45,6 +49,10 @@ export function format(text: string): string {
   result = result.replace(/\n\s*([a-z])/g, (_match, letter: string) => {
     return `\n${letter.toUpperCase()}`;
   });
+
+  // Remove spurious commas after English articles — STT engines insert
+  // commas at speech pauses, and "the, world" is almost never grammatical.
+  result = result.replace(/\b(the|a|an),\s+/gi, '$1 ');
 
   // Remove space before punctuation
   result = result.replace(/ ([.,;:!?])/g, '$1');

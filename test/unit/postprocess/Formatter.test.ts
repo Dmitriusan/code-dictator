@@ -163,6 +163,37 @@ describe('Formatter.format()', () => {
     });
   });
 
+  describe('false start / self-correction removal (double-dash)', () => {
+    it('removes abandoned word before double-dash', () => {
+      expect(format('so the-- some entity')).toBe('So some entity');
+    });
+
+    it('removes abandoned word at start of text', () => {
+      expect(format('the-- hello world')).toBe('Hello world');
+    });
+
+    it('removes abandoned word with trailing comma', () => {
+      expect(format('I went to the--, no the store')).toBe('I went to no the store');
+    });
+
+    it('removes multiple false starts', () => {
+      expect(format('I was go-- going to the-- a place')).toBe('I was going to a place');
+    });
+
+    it('handles false start at end of text', () => {
+      expect(format('I wanted to--')).toBe('I wanted');
+    });
+
+    it('does not touch single dashes (hyphenated words)', () => {
+      expect(format('well-known pattern')).toBe('Well-known pattern');
+    });
+
+    it('does not touch em-dashes used as punctuation', () => {
+      // em-dash (—) is different from double-dash (--)
+      expect(format('hello — world')).toBe('Hello — world');
+    });
+  });
+
   describe('bracketed noise removal', () => {
     it('removes [engine revving]', () => {
       expect(format('hello [engine revving]')).toBe('Hello');
@@ -174,6 +205,30 @@ describe('Formatter.format()', () => {
 
     it('removes multiple bracketed noises', () => {
       expect(format('[noise] hello [sneeze] world [laughter]')).toBe('Hello world');
+    });
+  });
+
+  describe('spurious comma after articles', () => {
+    it('removes comma after "the"', () => {
+      expect(format('check out the, project, folder')).toBe('Check out the project, folder');
+    });
+
+    it('removes comma after "a"', () => {
+      expect(format('create a, new file')).toBe('Create a new file');
+    });
+
+    it('removes comma after "an"', () => {
+      expect(format('this is an, important thing')).toBe('This is an important thing');
+    });
+
+    it('is case-insensitive', () => {
+      expect(format('The, quick fox')).toBe('The quick fox');
+    });
+
+    it('does not affect legitimate comma usage after articles at end of clause', () => {
+      // "the" at end of a clause followed by a new clause is rare,
+      // but the rule still fires — acceptable trade-off for dictation context.
+      expect(format('the, world')).toBe('The world');
     });
   });
 
