@@ -99,43 +99,25 @@
       "title": "Code Dictator",
       "properties": {
         "codeDictator.provider": {
+          "order": 1,
           "type": "string",
           "default": "elevenlabs",
           "enum": ["elevenlabs", "openai", "custom"],
           "enumDescriptions": [
             "ElevenLabs Scribe v2 — High accuracy, 90+ languages (recommended)",
-            "OpenAI Whisper — Great alternative with existing OpenAI key",
+            "OpenAI Whisper — Great alternative if you already have an API key",
             "Custom Whisper-compatible API endpoint"
           ],
           "description": "Speech-to-text provider"
         },
         "codeDictator.customApiUrl": {
+          "order": 2,
           "type": "string",
           "default": "",
           "description": "Custom Whisper-compatible API endpoint URL (e.g., http://localhost:8000/v1/audio/transcriptions)"
         },
-        "codeDictator.recordingMode": {
-          "type": "string",
-          "default": "toggle",
-          "enum": ["toggle", "hold"],
-          "enumDescriptions": [
-            "Press Alt+D once to start recording, press Alt+D again to stop and transcribe",
-            "Hold Alt+D to record — release the key to stop and transcribe automatically"
-          ],
-          "description": "Recording activation mode"
-        },
-        "codeDictator.audioIsolation": {
-          "type": "string",
-          "default": "basic",
-          "enum": ["off", "basic", "aggressive"],
-          "enumDescriptions": [
-            "No noise reduction — raw audio",
-            "Browser-native noise suppression and echo cancellation",
-            "Additional filtering (high-pass, low-pass, compressor)"
-          ],
-          "description": "Audio noise reduction level"
-        },
         "codeDictator.language": {
+          "order": 3,
           "type": "string",
           "default": "",
           "enum": ["", "en", "es", "fr", "de", "pt", "zh", "ja", "ko", "ru", "uk", "pl", "hi", "ar", "tr", "it", "nl", "sv", "da", "fi", "no", "cs", "ro", "hu", "el", "he", "th", "vi", "id", "ms", "bg", "hr", "sk", "sl", "sr", "ca", "ta", "bn"],
@@ -143,6 +125,7 @@
           "description": "Transcription language. Leave as Auto-detect for automatic language detection."
         },
         "codeDictator.preferredLanguages": {
+          "order": 4,
           "type": "array",
           "items": {
             "type": "string",
@@ -153,23 +136,19 @@
           "description": "Your preferred languages for quick switching. Only these appear in the language picker. Use \"Code Dictator: Configure Languages\" command for a visual picker.",
           "uniqueItems": true
         },
-        "codeDictator.autoCleanup": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Use an AI language model to further clean up transcriptions (rephrase, fix grammar, remove context-sensitive fillers). **Requires an OpenAI API key** — [Set Cleanup API Key](command:codeDictator.setCleanupApiKey).\n\n*Note: Basic filler removal (uh, um, äh, ну, etc.) is always active — language-aware and free, no API needed.*"
-        },
-        "codeDictator.cleanupModel": {
+        "codeDictator.recordingMode": {
+          "order": 5,
           "type": "string",
-          "default": "gpt-4.1-nano",
-          "enum": ["gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1"],
-          "markdownDescription": "OpenAI model for text cleanup. Smaller models are cheaper and faster; larger models produce better results."
-        },
-        "codeDictator.codeAwareMode": {
-          "type": "boolean",
-          "default": true,
-          "description": "Convert spoken code terms to symbols (e.g., 'open paren' → '(')"
+          "default": "toggle",
+          "enum": ["toggle", "hold"],
+          "enumDescriptions": [
+            "Press Alt+D once to start recording, press Alt+D again to stop and transcribe",
+            "Hold Alt+D to record — release the key to stop and transcribe automatically"
+          ],
+          "description": "Recording activation mode"
         },
         "codeDictator.defaultTarget": {
+          "order": 6,
           "type": "string",
           "default": "clipboard",
           "enum": ["clipboard", "editor"],
@@ -180,16 +159,44 @@
           "description": "Where to send transcribed text"
         },
         "codeDictator.autoCopyToClipboard": {
+          "order": 7,
           "type": "boolean",
           "default": true,
           "description": "Also copy transcription to clipboard (in addition to primary target)"
         },
-        "codeDictator.showCostIndicator": {
+        "codeDictator.audioIsolation": {
+          "order": 8,
+          "type": "string",
+          "default": "basic",
+          "enum": ["off", "basic", "aggressive"],
+          "enumDescriptions": [
+            "No noise reduction — raw audio",
+            "Browser-native noise suppression and echo cancellation",
+            "Additional filtering (high-pass, low-pass, compressor)"
+          ],
+          "description": "Audio noise reduction level"
+        },
+        "codeDictator.codeAwareMode": {
+          "order": 9,
           "type": "boolean",
           "default": true,
-          "description": "Show estimated cost in status bar"
+          "description": "Convert spoken code terms to symbols (e.g., 'open paren' → '(')"
+        },
+        "codeDictator.autoCleanup": {
+          "order": 10,
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Use an AI language model to further clean up transcriptions (rephrase, fix grammar, remove context-sensitive fillers). **Requires an OpenAI API key** — [Set Cleanup API Key](command:codeDictator.setCleanupApiKey).\n\n*Note: Basic filler removal (uh, um, äh, ну, etc.) is always active — language-aware and free, no API needed.*"
+        },
+        "codeDictator.cleanupModel": {
+          "order": 11,
+          "type": "string",
+          "default": "gpt-4.1-nano",
+          "enum": ["gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1"],
+          "markdownDescription": "OpenAI model for text cleanup. Smaller models are cheaper and faster; larger models produce better results."
         },
         "codeDictator.maxRecordingDuration": {
+          "order": 12,
           "type": "number",
           "default": 300,
           "minimum": 10,
@@ -197,13 +204,21 @@
           "description": "Maximum recording duration in seconds"
         },
         "codeDictator.silenceTimeout": {
+          "order": 13,
           "type": "number",
           "default": 0,
           "minimum": 0,
           "maximum": 60,
           "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Silence detection requires the webview-based recorder. On Linux systems using arecord as the native recorder, this setting has no effect — use `maxRecordingDuration` instead.*"
         },
+        "codeDictator.showCostIndicator": {
+          "order": 14,
+          "type": "boolean",
+          "default": true,
+          "description": "Show estimated cost in status bar"
+        },
         "codeDictator.diagnosticLogging": {
+          "order": 15,
           "type": "boolean",
           "default": false,
           "markdownDescription": "Log recording diagnostics to the **Code Dictator** output channel. Enable this if recordings stop unexpectedly or you need to troubleshoot microphone issues."

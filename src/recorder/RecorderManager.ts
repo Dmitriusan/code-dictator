@@ -62,14 +62,8 @@ export class RecorderManager implements vscode.Disposable {
       return;
     }
 
-    // Prefer native recording (no visible webview tab, zero UI artifacts)
-    if (NativeRecorder.isAvailable()) {
-      diagLog('RecorderManager', 'Using native recorder path');
-      return this.startNativeRecording(maxDuration);
-    }
-
-    // Fall back to webview MediaRecorder (macOS/Windows without sox)
-    diagLog('RecorderManager', 'Using webview recorder path');
+    // Primary: webview MediaRecorder (uses PulseAudio/PipeWire, works everywhere)
+    diagLog('RecorderManager', 'Trying webview recorder path');
     try {
       await this.ensurePanel();
 
@@ -102,11 +96,16 @@ export class RecorderManager implements vscode.Disposable {
       });
       return startResult;
     } catch (webviewError) {
-      // Webview mic permission failed — no native fallback available either
+      // Webview mic permission failed — try native fallback (arecord/sox)
       this.permissionErrorHandler = undefined;
       this._isRecording = false;
       if (this.panel) {
         this.panel.webview.postMessage({ type: 'cancelRecording' } as MessageToWebview);
+      }
+
+      if (NativeRecorder.isAvailable()) {
+        diagLog('RecorderManager', 'Webview mic denied, falling back to native recorder');
+        return this.startNativeRecording(maxDuration);
       }
 
       throw new Error(
@@ -332,6 +331,10 @@ export class RecorderManager implements vscode.Disposable {
         }
       }, 5000);
     });
+
+    // Hide the recorder tab — switch back to the user's active editor.
+    // The webview stays alive thanks to retainContextWhenHidden: true.
+    await vscode.commands.executeCommand('workbench.action.previousEditor');
   }
 
   private handleWebviewMessage(message: MessageFromWebview): void {

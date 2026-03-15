@@ -21,6 +21,7 @@ export class NativeRecorder {
   private startTime = 0;
   private onUnexpectedExit: (() => void) | null = null;
   private stderrData = '';
+  private stoppingGracefully = false;
 
   get isRecording(): boolean {
     return this._isRecording;
@@ -113,7 +114,7 @@ export class NativeRecorder {
 
         // Detect unexpected process exit during active recording
         this.process.on('close', (code, signal) => {
-          if (this._isRecording) {
+          if (this._isRecording && !this.stoppingGracefully) {
             const elapsed = Math.round((Date.now() - this.startTime) / 1000);
             diagLog('NativeRecorder', `Process exited unexpectedly after ${elapsed}s. code=${code}, signal=${signal}, stderr=${this.stderrData.trim()}`);
             this._isRecording = false;
@@ -144,6 +145,7 @@ export class NativeRecorder {
       throw new Error('Not recording');
     }
 
+    this.stoppingGracefully = true;
     const tempFile = this.tempFile!;
     const proc = this.process;
     const durationMs = Date.now() - this.startTime;
@@ -222,6 +224,7 @@ export class NativeRecorder {
     this.startTime = 0;
     this.onUnexpectedExit = null;
     this.stderrData = '';
+    this.stoppingGracefully = false;
   }
 }
 
