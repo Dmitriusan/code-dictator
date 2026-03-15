@@ -184,7 +184,7 @@ Voice input requires a local VS Code window. Remote environments don't expose mi
 
 ## License
 
-MIT — see [LICENSE](LICENSE.txt).
+MIT — see [LICENSE](LICENSE).
 
 ---
 

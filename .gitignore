@@ -6,5 +6,6 @@ out/
 .env
 .claude/
 CLAUDE.md
+memory/
 tmp/
 .vscode-test/
