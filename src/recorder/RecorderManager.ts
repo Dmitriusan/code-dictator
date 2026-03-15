@@ -105,7 +105,7 @@ export class RecorderManager implements vscode.Disposable {
 
       if (NativeRecorder.isAvailable()) {
         diagLog('RecorderManager', 'Webview mic denied, falling back to native recorder');
-        return this.startNativeRecording(maxDuration);
+        return this.startNativeRecording(silenceTimeout, maxDuration);
       }
 
       throw new Error(
@@ -114,7 +114,7 @@ export class RecorderManager implements vscode.Disposable {
     }
   }
 
-  private async startNativeRecording(maxDuration: number): Promise<void> {
+  private async startNativeRecording(silenceTimeout: number, maxDuration: number): Promise<void> {
     this.nativeRecorder = new NativeRecorder();
 
     // If the native process exits unexpectedly, stop recording and report
@@ -124,9 +124,17 @@ export class RecorderManager implements vscode.Disposable {
       this.emit('error', 'Recording process exited unexpectedly. Enable diagnostic logging in settings for details.');
     });
 
-    await this.nativeRecorder.start();
+    // Wire up silence detection
+    if (silenceTimeout > 0) {
+      this.nativeRecorder.setSilenceHandler(() => {
+        diagLog('RecorderManager', 'Native recorder silence detected, auto-stopping');
+        this.emit('silenceDetected');
+      });
+    }
+
+    await this.nativeRecorder.start(silenceTimeout);
     this._isRecording = true;
-    diagLog('RecorderManager', 'Started native recording');
+    diagLog('RecorderManager', `Started native recording, silenceTimeout=${silenceTimeout}s`);
 
     // Max duration enforcement
     if (maxDuration > 0) {

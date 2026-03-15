@@ -20,8 +20,12 @@ export class NativeRecorder {
   private _isRecording = false;
   private startTime = 0;
   private onUnexpectedExit: (() => void) | null = null;
+  private onSilenceDetected: (() => void) | null = null;
   private stderrData = '';
   private stoppingGracefully = false;
+  private silenceTimeout = 0;
+  private silenceStart: number | null = null;
+  private silenceCheckInterval: ReturnType<typeof setInterval> | null = null;
 
   get isRecording(): boolean {
     return this._isRecording;
@@ -73,7 +77,7 @@ export class NativeRecorder {
     return NativeRecorder.detectTool() !== null;
   }
 
-  async start(): Promise<void> {
+  async start(silenceTimeout = 0): Promise<void> {
     if (this._isRecording) {
       throw new Error('Already recording');
     }
@@ -83,11 +87,21 @@ export class NativeRecorder {
       throw new Error('No native recording tool found (arecord or sox)');
     }
 
+    this.silenceTimeout = silenceTimeout;
     this.tempFile = path.join(os.tmpdir(), `code-dictator-${Date.now()}.wav`);
+
+    // When silence detection is needed, pipe stdout so we can analyze audio levels.
+    // Otherwise, write directly to file.
+    const useStdoutPipe = silenceTimeout > 0 && tool.name === 'arecord';
 
     let args: string[];
     if (tool.name === 'arecord') {
-      args = ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'wav', this.tempFile];
+      if (useStdoutPipe) {
+        // Output raw PCM to stdout for real-time analysis
+        args = ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'raw', '-'];
+      } else {
+        args = ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'wav', this.tempFile];
+      }
     } else if (tool.command.endsWith('rec')) {
       args = ['-r', '16000', '-c', '1', '-b', '16', this.tempFile];
     } else {
@@ -105,6 +119,22 @@ export class NativeRecorder {
         this.process.stderr?.on('data', (chunk: Buffer) => {
           this.stderrData += chunk.toString();
         });
+
+        // If piping stdout, write raw PCM to file and analyze for silence
+        if (useStdoutPipe) {
+          const writeStream = fs.createWriteStream(this.tempFile);
+          // Write WAV header (will be finalized on stop)
+          writeStream.write(createWavHeader());
+
+          this.process.stdout?.on('data', (chunk: Buffer) => {
+            writeStream.write(chunk);
+            this.analyzeChunkForSilence(chunk);
+          });
+
+          this.process.on('close', () => {
+            writeStream.end();
+          });
+        }
 
         this.process.on('error', (err) => {
           diagLog('NativeRecorder', `Process error: ${err.message}`);
@@ -129,7 +159,7 @@ export class NativeRecorder {
           if (this.process && !this.process.killed) {
             this._isRecording = true;
             this.startTime = Date.now();
-            diagLog('NativeRecorder', `Recording started with ${tool.name}`);
+            diagLog('NativeRecorder', `Recording started with ${tool.name}, silenceTimeout=${silenceTimeout}s`);
             resolve();
           }
         }, 150);
@@ -138,6 +168,118 @@ export class NativeRecorder {
         reject(err);
       }
     });
+  }
+
+  private chunkCount = 0;
+
+  // Adaptive VAD state
+  private noiseFloorEma = 0;    // EMA of noise floor (dBFS)
+  private speechPeakEma = -60;  // EMA of speech peaks (dBFS)
+  private vadReady = false;     // True once we've seen both silence and speech
+  private hasSeenSpeech = false;
+
+  // EMA smoothing factors (α). Lower = smoother/slower adaptation.
+  // Noise floor adapts slowly (tracks ambient drift), speech peak adapts moderately.
+  private static readonly NOISE_ALPHA = 0.05;
+  private static readonly SPEECH_ALPHA = 0.1;
+  // Threshold is placed at this fraction between noise floor and speech peak (in dB).
+  // 0.3 = closer to noise (more sensitive), 0.7 = closer to speech (less sensitive).
+  private static readonly THRESHOLD_POSITION = 0.35;
+  // Minimum dB gap between noise and speech before silence detection activates.
+  // Prevents false triggers when noise and speech are indistinguishable.
+  private static readonly MIN_SNR_DB = 6;
+  // Absolute floor: anything below this dBFS is definitely silence regardless of calibration.
+  private static readonly ABSOLUTE_SILENCE_DBFS = -60;
+
+  /**
+   * Analyze raw PCM S16_LE audio data for silence detection using adaptive VAD.
+   *
+   * Approach: Work in dBFS (decibels relative to full scale) for perceptually
+   * meaningful comparisons. Maintain two exponential moving averages — one for
+   * the noise floor (slow adaptation) and one for speech peaks (moderate adaptation).
+   * The silence threshold is placed between them. This adapts to any mic gain,
+   * ambient noise level, and speaker volume automatically.
+   */
+  private analyzeChunkForSilence(chunk: Buffer): void {
+    if (this.silenceTimeout <= 0) return;
+
+    const samples = chunk.length / 2;
+    if (samples === 0) return;
+
+    // Compute RMS amplitude
+    let sumSquares = 0;
+    for (let i = 0; i < chunk.length - 1; i += 2) {
+      const sample = chunk.readInt16LE(i);
+      sumSquares += sample * sample;
+    }
+    const rms = Math.sqrt(sumSquares / samples);
+
+    // Convert to dBFS (0 dBFS = full scale 32768)
+    const dbfs = rms > 0 ? 20 * Math.log10(rms / 32768) : -96;
+
+    this.chunkCount++;
+
+    // Bootstrap: seed the noise floor EMA with the first chunk
+    if (this.chunkCount === 1) {
+      this.noiseFloorEma = dbfs;
+      diagLog('NativeRecorder', `VAD init: first chunk dBFS=${dbfs.toFixed(1)}`);
+      return;
+    }
+
+    // Classify this chunk: is it likely speech or noise?
+    // A chunk significantly above the current noise floor is speech.
+    const aboveFloor = dbfs - this.noiseFloorEma;
+    const isSpeechChunk = aboveFloor > NativeRecorder.MIN_SNR_DB;
+
+    if (isSpeechChunk) {
+      // Update speech peak EMA
+      this.speechPeakEma = this.speechPeakEma + NativeRecorder.SPEECH_ALPHA * (dbfs - this.speechPeakEma);
+      if (!this.hasSeenSpeech) {
+        this.hasSeenSpeech = true;
+        this.speechPeakEma = dbfs; // Seed with first speech sample
+        diagLog('NativeRecorder', `VAD: first speech detected at dBFS=${dbfs.toFixed(1)}, noiseFloor=${this.noiseFloorEma.toFixed(1)}`);
+      }
+    } else {
+      // Update noise floor EMA (only when not speaking, so speech doesn't pull it up)
+      this.noiseFloorEma = this.noiseFloorEma + NativeRecorder.NOISE_ALPHA * (dbfs - this.noiseFloorEma);
+    }
+
+    // Compute adaptive threshold: interpolate between noise floor and speech peak
+    const snr = this.speechPeakEma - this.noiseFloorEma;
+    const threshold = this.noiseFloorEma + snr * NativeRecorder.THRESHOLD_POSITION;
+
+    // VAD is ready once we've seen speech and have a meaningful SNR
+    if (!this.vadReady && this.hasSeenSpeech && snr >= NativeRecorder.MIN_SNR_DB) {
+      this.vadReady = true;
+      diagLog('NativeRecorder', `VAD ready: noiseFloor=${this.noiseFloorEma.toFixed(1)}dB, speechPeak=${this.speechPeakEma.toFixed(1)}dB, SNR=${snr.toFixed(1)}dB, threshold=${threshold.toFixed(1)}dB`);
+    }
+
+    // Log periodically
+    if (this.chunkCount % 50 === 0) {
+      diagLog('NativeRecorder', `VAD: dBFS=${dbfs.toFixed(1)}, floor=${this.noiseFloorEma.toFixed(1)}, speech=${this.speechPeakEma.toFixed(1)}, thr=${threshold.toFixed(1)}, SNR=${snr.toFixed(1)}, ready=${this.vadReady}`);
+    }
+
+    // Don't detect silence until we've calibrated by hearing actual speech
+    if (!this.vadReady) return;
+
+    const isSilent = dbfs < threshold || dbfs < NativeRecorder.ABSOLUTE_SILENCE_DBFS;
+
+    if (isSilent) {
+      if (this.silenceStart === null) {
+        this.silenceStart = Date.now();
+      } else {
+        const silentMs = Date.now() - this.silenceStart;
+        if (silentMs >= this.silenceTimeout * 1000) {
+          diagLog('NativeRecorder', `Silence timeout: ${silentMs}ms silent, dBFS=${dbfs.toFixed(1)}, threshold=${threshold.toFixed(1)}`);
+          this.silenceStart = null;
+          if (this.onSilenceDetected) {
+            this.onSilenceDetected();
+          }
+        }
+      }
+    } else {
+      this.silenceStart = null;
+    }
   }
 
   async stop(): Promise<{ buffer: Buffer; mimeType: string; durationMs: number }> {
@@ -160,20 +302,31 @@ export class NativeRecorder {
         resolved = true;
         if (killTimeout) clearTimeout(killTimeout);
 
-        try {
-          if (fs.existsSync(tempFile)) {
-            const buffer = fs.readFileSync(tempFile);
-            fs.unlinkSync(tempFile);
+        // Small delay to let the write stream flush
+        setTimeout(() => {
+          try {
+            if (fs.existsSync(tempFile)) {
+              const buffer = fs.readFileSync(tempFile);
+
+              // Fix WAV header sizes if we wrote raw PCM with a placeholder header
+              if (buffer.length > 44 && buffer.toString('ascii', 0, 4) === 'RIFF') {
+                const dataSize = buffer.length - 44;
+                buffer.writeUInt32LE(dataSize + 36, 4); // RIFF chunk size
+                buffer.writeUInt32LE(dataSize, 40);      // data chunk size
+              }
+
+              fs.unlinkSync(tempFile);
+              this.cleanup();
+              resolve({ buffer, mimeType: 'audio/wav', durationMs });
+            } else {
+              this.cleanup();
+              reject(new Error('Recording file not found'));
+            }
+          } catch (err) {
             this.cleanup();
-            resolve({ buffer, mimeType: 'audio/wav', durationMs });
-          } else {
-            this.cleanup();
-            reject(new Error('Recording file not found'));
+            reject(err);
           }
-        } catch (err) {
-          this.cleanup();
-          reject(err);
-        }
+        }, 100);
       };
 
       proc.on('close', handleClose);
@@ -212,6 +365,10 @@ export class NativeRecorder {
     this.onUnexpectedExit = handler;
   }
 
+  setSilenceHandler(handler: () => void): void {
+    this.onSilenceDetected = handler;
+  }
+
   getElapsedTime(): number {
     if (!this._isRecording) return 0;
     return Date.now() - this.startTime;
@@ -223,9 +380,51 @@ export class NativeRecorder {
     this._isRecording = false;
     this.startTime = 0;
     this.onUnexpectedExit = null;
+    this.onSilenceDetected = null;
     this.stderrData = '';
     this.stoppingGracefully = false;
+    this.silenceTimeout = 0;
+    this.silenceStart = null;
+    this.chunkCount = 0;
+    this.noiseFloorEma = 0;
+    this.speechPeakEma = -60;
+    this.vadReady = false;
+    this.hasSeenSpeech = false;
+    if (this.silenceCheckInterval) {
+      clearInterval(this.silenceCheckInterval);
+      this.silenceCheckInterval = null;
+    }
   }
+}
+
+/**
+ * Create a WAV header for 16-bit mono 16kHz PCM.
+ * Data size is set to max (will be truncated by actual file size on read).
+ */
+function createWavHeader(): Buffer {
+  const header = Buffer.alloc(44);
+  const sampleRate = 16000;
+  const channels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * channels * (bitsPerSample / 8);
+  const blockAlign = channels * (bitsPerSample / 8);
+  const maxDataSize = 0x7FFFFFFF - 36; // max possible
+
+  header.write('RIFF', 0);
+  header.writeUInt32LE(maxDataSize + 36, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16); // fmt chunk size
+  header.writeUInt16LE(1, 20);  // PCM format
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(maxDataSize, 40);
+
+  return header;
 }
 
 function isExecutable(filePath: string): boolean {
