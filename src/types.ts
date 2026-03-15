@@ -43,6 +43,7 @@ export interface CodeDictatorSettings {
   showCostIndicator: boolean;
   maxRecordingDuration: number;
   silenceTimeout: number;
+  diagnosticLogging: boolean;
 }
 
 // History
@@ -77,7 +78,8 @@ export type MessageFromWebview =
   | { type: 'recordingStarted' }
   | { type: 'recordingStopped' }
   | { type: 'recordingError'; message: string }
-  | { type: 'silenceDetected' };
+  | { type: 'silenceDetected' }
+  | { type: 'diagnosticLog'; message: string };
 
 export type MessageToWebview =
   | { type: 'startRecording'; isolation: AudioIsolation; silenceTimeout: number; maxDuration: number }

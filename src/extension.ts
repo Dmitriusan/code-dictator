@@ -14,6 +14,7 @@ import { cleanup as llmCleanup } from './postprocess/LLMCleanup';
 import { showLanguagePicker, showLanguageConfigurator } from './ui/LanguagePicker';
 import { runSetupWizard } from './ui/SetupWizard';
 import { HoldModeController } from './recorder/HoldModeController';
+import { configureDiagnosticLog, diagLog, disposeDiagnosticLog } from './DiagnosticLog';
 import type { TranscriptionResult } from './types';
 
 let storageService: StorageService;
@@ -28,6 +29,7 @@ let cleanupKeyWarningShown = false;
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize services
   storageService = new StorageService(context);
+  configureDiagnosticLog(storageService.getSettings().diagnosticLogging);
   statusBar = new StatusBar();
   recorder = new RecorderManager(context.extensionUri);
   usageTracker = new UsageTracker(storageService);
@@ -180,6 +182,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const newSettings = storageService.getSettings();
         statusBar.updateLanguage(newSettings.language);
         statusBar.updateCost(usageTracker.getStatusBarText(), newSettings.showCostIndicator);
+        configureDiagnosticLog(newSettings.diagnosticLogging);
       }
     }),
   );
@@ -220,6 +223,7 @@ async function handleStartRecording(): Promise<void> {
   }
 
   try {
+    diagLog('Extension', `Starting recording: provider=${settings.provider}, isolation=${settings.audioIsolation}, maxDuration=${settings.maxRecordingDuration}s`);
     statusBar.updateState('recording');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', true);
     await recorder.startRecording(
@@ -244,6 +248,7 @@ async function handleStopAndTranscribe(): Promise<void> {
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
 
     const audioPayload = await recorder.stopRecording();
+    diagLog('Extension', `Recording stopped: ${Math.round(audioPayload.durationMs / 1000)}s, ${audioPayload.buffer.length} bytes, mime=${audioPayload.mimeType}`);
 
     // Transcribe
     const provider = createProvider(settings, (p) => storageService.getApiKey(p));
@@ -287,11 +292,14 @@ async function handleStopAndTranscribe(): Promise<void> {
       const cleanupKey = await storageService.getApiKey('openai-cleanup')
         || await storageService.getApiKey('openai');
       if (cleanupKey) {
+        diagLog('Extension', 'Starting AI cleanup with model=' + settings.cleanupModel);
         statusBar.updateState('cleaning');
         try {
           text = await llmCleanup(text, cleanupKey, settings.cleanupModel);
+          diagLog('Extension', 'AI cleanup complete');
         } catch (error) {
           console.warn('Code Dictator: AI cleanup failed, using raw text', error);
+          diagLog('Extension', 'AI cleanup failed: ' + (error instanceof Error ? error.message : String(error)));
         }
       } else if (!cleanupKeyWarningShown) {
         cleanupKeyWarningShown = true;
@@ -499,6 +507,5 @@ async function handleShowUsage(): Promise<void> {
 }
 
 export function deactivate(): void {
-  // All disposables registered via context.subscriptions are automatically disposed
-  // This function handles any additional cleanup if needed
+  disposeDiagnosticLog();
 }

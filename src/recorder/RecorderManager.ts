@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import type { AudioIsolation, MessageFromWebview, MessageToWebview } from '../types';
 import { getRecorderWebviewContent } from './RecorderWebviewContent';
 import { NativeRecorder } from './NativeRecorder';
+import { diagLog } from '../DiagnosticLog';
 
 type RecorderEvent = 'recordingStarted' | 'recordingStopped' | 'audioData' | 'error' | 'silenceDetected';
 
@@ -63,10 +64,12 @@ export class RecorderManager implements vscode.Disposable {
 
     // Prefer native recording (no visible webview tab, zero UI artifacts)
     if (NativeRecorder.isAvailable()) {
+      diagLog('RecorderManager', 'Using native recorder path');
       return this.startNativeRecording(maxDuration);
     }
 
     // Fall back to webview MediaRecorder (macOS/Windows without sox)
+    diagLog('RecorderManager', 'Using webview recorder path');
     try {
       await this.ensurePanel();
 
@@ -114,13 +117,23 @@ export class RecorderManager implements vscode.Disposable {
 
   private async startNativeRecording(maxDuration: number): Promise<void> {
     this.nativeRecorder = new NativeRecorder();
+
+    // If the native process exits unexpectedly, stop recording and report
+    this.nativeRecorder.setUnexpectedExitHandler(() => {
+      diagLog('RecorderManager', 'Native recorder exited unexpectedly — stopping');
+      this._isRecording = false;
+      this.emit('error', 'Recording process exited unexpectedly. Enable diagnostic logging in settings for details.');
+    });
+
     await this.nativeRecorder.start();
     this._isRecording = true;
+    diagLog('RecorderManager', 'Started native recording');
 
     // Max duration enforcement
     if (maxDuration > 0) {
       setTimeout(() => {
         if (this._isRecording && this.nativeRecorder?.isRecording) {
+          diagLog('RecorderManager', 'Max duration reached, auto-stopping');
           this.emit('silenceDetected'); // Reuse silence signal to auto-stop
         }
       }, maxDuration * 1000);
@@ -373,6 +386,10 @@ export class RecorderManager implements vscode.Disposable {
       }
       case 'silenceDetected': {
         this.emit('silenceDetected');
+        break;
+      }
+      case 'diagnosticLog': {
+        diagLog('Webview', message.message);
         break;
       }
     }

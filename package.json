@@ -202,6 +202,11 @@
           "minimum": 0,
           "maximum": 60,
           "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Silence detection requires the webview-based recorder. On Linux systems using arecord as the native recorder, this setting has no effect — use `maxRecordingDuration` instead.*"
+        },
+        "codeDictator.diagnosticLogging": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Log recording diagnostics to the **Code Dictator** output channel. Enable this if recordings stop unexpectedly or you need to troubleshoot microphone issues."
         }
       }
     },

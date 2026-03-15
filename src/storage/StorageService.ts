@@ -57,6 +57,7 @@ export class StorageService {
       showCostIndicator: config.get<boolean>('showCostIndicator', true),
       maxRecordingDuration: config.get<number>('maxRecordingDuration', 300),
       silenceTimeout: config.get<number>('silenceTimeout', 0),
+      diagnosticLogging: config.get<boolean>('diagnosticLogging', false),
     };
   }
 

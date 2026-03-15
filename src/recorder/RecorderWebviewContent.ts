@@ -178,6 +178,9 @@ export function getRecorderWebviewContent(nonce: string): string {
         };
 
         mediaRecorder.onstop = async () => {
+          const elapsedMs = Date.now() - recordingStart;
+          vscode.postMessage({ type: 'diagnosticLog', message: 'MediaRecorder.onstop fired after ' + Math.round(elapsedMs / 1000) + 's. chunks=' + audioChunks.length + ', cancelled=' + cancelled });
+
           clearInterval(silenceCheckInterval);
           silenceCheckInterval = null;
           clearTimeout(maxDurationTimeout);
@@ -235,8 +238,22 @@ export function getRecorderWebviewContent(nonce: string): string {
           });
         };
 
+        // Monitor audio tracks — if the system revokes mic access or the
+        // audio device disconnects, the track ends and MediaRecorder stops
+        // silently. Detect this so we can report it instead of losing audio.
+        for (const track of recorderStream.getTracks()) {
+          track.onended = () => {
+            vscode.postMessage({ type: 'diagnosticLog', message: 'Audio track ended unexpectedly (track.onended fired). readyState=' + track.readyState });
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+              vscode.postMessage({ type: 'diagnosticLog', message: 'Stopping MediaRecorder due to track end' });
+              mediaRecorder.stop();
+            }
+          };
+        }
+
         mediaRecorder.start(250); // Collect data every 250ms
         recordingStart = Date.now();
+        vscode.postMessage({ type: 'diagnosticLog', message: 'MediaRecorder started. mimeType=' + (mediaRecorder.mimeType || 'default') + ', isolation=' + isolation + ', stream tracks=' + recorderStream.getTracks().length });
 
         // Set up silence detection
         if (silenceTimeout > 0 && analyser) {

@@ -2,6 +2,7 @@ import { spawn, execSync, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { diagLog } from '../DiagnosticLog';
 
 interface NativeTool {
   name: string;
@@ -18,6 +19,8 @@ export class NativeRecorder {
   private tempFile: string | null = null;
   private _isRecording = false;
   private startTime = 0;
+  private onUnexpectedExit: (() => void) | null = null;
+  private stderrData = '';
 
   get isRecording(): boolean {
     return this._isRecording;
@@ -93,11 +96,31 @@ export class NativeRecorder {
 
     return new Promise((resolve, reject) => {
       try {
+        this.stderrData = '';
         this.process = spawn(tool.command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        diagLog('NativeRecorder', `Spawned ${tool.command} ${args.join(' ')}`);
+
+        // Capture stderr for diagnostics
+        this.process.stderr?.on('data', (chunk: Buffer) => {
+          this.stderrData += chunk.toString();
+        });
 
         this.process.on('error', (err) => {
+          diagLog('NativeRecorder', `Process error: ${err.message}`);
           this.cleanup();
           reject(new Error(`Failed to start recording: ${err.message}`));
+        });
+
+        // Detect unexpected process exit during active recording
+        this.process.on('close', (code, signal) => {
+          if (this._isRecording) {
+            const elapsed = Math.round((Date.now() - this.startTime) / 1000);
+            diagLog('NativeRecorder', `Process exited unexpectedly after ${elapsed}s. code=${code}, signal=${signal}, stderr=${this.stderrData.trim()}`);
+            this._isRecording = false;
+            if (this.onUnexpectedExit) {
+              this.onUnexpectedExit();
+            }
+          }
         });
 
         // Give it a moment to start
@@ -105,6 +128,7 @@ export class NativeRecorder {
           if (this.process && !this.process.killed) {
             this._isRecording = true;
             this.startTime = Date.now();
+            diagLog('NativeRecorder', `Recording started with ${tool.name}`);
             resolve();
           }
         }, 150);
@@ -123,6 +147,7 @@ export class NativeRecorder {
     const tempFile = this.tempFile!;
     const proc = this.process;
     const durationMs = Date.now() - this.startTime;
+    diagLog('NativeRecorder', `Stopping recording after ${Math.round(durationMs / 1000)}s`);
 
     return new Promise((resolve, reject) => {
       let resolved = false;
@@ -181,6 +206,10 @@ export class NativeRecorder {
     this.cleanup();
   }
 
+  setUnexpectedExitHandler(handler: () => void): void {
+    this.onUnexpectedExit = handler;
+  }
+
   getElapsedTime(): number {
     if (!this._isRecording) return 0;
     return Date.now() - this.startTime;
@@ -191,6 +220,8 @@ export class NativeRecorder {
     this.tempFile = null;
     this._isRecording = false;
     this.startTime = 0;
+    this.onUnexpectedExit = null;
+    this.stderrData = '';
   }
 }
 
