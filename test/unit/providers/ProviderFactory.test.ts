@@ -21,6 +21,7 @@ function makeSettings(overrides: Partial<CodeDictatorSettings> = {}): CodeDictat
     codeAwareMode: true,
     defaultTarget: 'clipboard',
     autoCopyToClipboard: true,
+    successfulTranscriptionSound: false,
     showCostIndicator: true,
     maxRecordingDuration: 300,
     silenceTimeout: 0,

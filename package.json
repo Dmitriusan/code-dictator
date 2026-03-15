@@ -111,7 +111,7 @@
           "description": "Speech-to-text provider for voice transcription. After changing, you will be prompted for an API key on first recording."
         },
         "codeDictator.customApiUrl": {
-          "order": 16,
+          "order": 17,
           "type": "string",
           "default": "",
           "description": "Custom Whisper-compatible API endpoint URL (e.g., http://localhost:8000/v1/audio/transcriptions)"
@@ -231,8 +231,14 @@
           "default": false,
           "description": "Use a solid background for the success indicator instead of colored text (exact color depends on your theme)"
         },
+        "codeDictator.successfulTranscriptionSound": {
+          "order": 16,
+          "type": "boolean",
+          "default": false,
+          "description": "Play a short chime when transcription completes successfully"
+        },
         "codeDictator.diagnosticLogging": {
-          "order": 17,
+          "order": 18,
           "type": "boolean",
           "default": false,
           "markdownDescription": "Log recording diagnostics to the **Code Dictator** output channel. Enable this if recordings stop unexpectedly or you need to troubleshoot microphone issues."

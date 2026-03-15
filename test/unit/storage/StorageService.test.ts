@@ -23,6 +23,7 @@ vi.mock('vscode', () => {
           codeAwareMode: true,
           defaultTarget: 'clipboard',
           autoCopyToClipboard: true,
+          successfulTranscriptionSound: false,
           showCostIndicator: true,
           maxRecordingDuration: 300,
           silenceTimeout: 0,
@@ -43,6 +44,7 @@ vi.mock('vscode', () => {
         codeAwareMode: true,
         defaultTarget: 'clipboard',
         autoCopyToClipboard: true,
+        successfulTranscriptionSound: false,
         showCostIndicator: true,
         maxRecordingDuration: 300,
         silenceTimeout: 0,
@@ -101,6 +103,7 @@ describe('StorageService', () => {
       expect(settings.codeAwareMode).toBe(true);
       expect(settings.defaultTarget).toBe('clipboard');
       expect(settings.autoCopyToClipboard).toBe(true);
+      expect(settings.successfulTranscriptionSound).toBe(false);
       expect(settings.showCostIndicator).toBe(true);
       expect(settings.maxRecordingDuration).toBe(300);
       expect(settings.silenceTimeout).toBe(0);

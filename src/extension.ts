@@ -15,6 +15,7 @@ import { showLanguagePicker, showLanguageConfigurator } from './ui/LanguagePicke
 import { runSetupWizard } from './ui/SetupWizard';
 import { HoldModeController } from './recorder/HoldModeController';
 import { configureDiagnosticLog, diagLog, disposeDiagnosticLog } from './DiagnosticLog';
+import { playCompletionChime } from './ui/SoundPlayer';
 import type { TranscriptionResult } from './types';
 
 let storageService: StorageService;
@@ -361,6 +362,11 @@ async function handleStopAndTranscribe(): Promise<void> {
     const charCount = text.length;
     const duration = Math.round(audioPayload.durationMs / 1000);
     statusBar.showTransientMessage(`$(check) ${charCount} chars, ${duration}s → ${destination}`, undefined, true);
+
+    // Completion sound (if enabled)
+    if (settings.successfulTranscriptionSound) {
+      playCompletionChime();
+    }
   } catch (error) {
     statusBar.updateState('idle');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
@@ -484,6 +490,10 @@ async function handleTranscribeFile(): Promise<void> {
 
     const charCount = text.length;
     statusBar.showTransientMessage(`$(check) File: ${charCount} chars → ${destination}`, undefined, true);
+
+    if (settings.successfulTranscriptionSound) {
+      playCompletionChime();
+    }
   } catch (error) {
     statusBar.updateState('idle');
     const message = error instanceof Error ? error.message : String(error);

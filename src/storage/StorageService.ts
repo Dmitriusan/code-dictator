@@ -62,6 +62,7 @@ export class StorageService {
       codeAwareMode: config.get<boolean>('codeAwareMode', true),
       defaultTarget: config.get<'clipboard' | 'editor'>('defaultTarget', 'clipboard'),
       autoCopyToClipboard: config.get<boolean>('autoCopyToClipboard', true),
+      successfulTranscriptionSound: config.get<boolean>('successfulTranscriptionSound', false),
       showCostIndicator: config.get<boolean>('showCostIndicator', true),
       maxRecordingDuration: config.get<number>('maxRecordingDuration', 300),
       silenceTimeout: config.get<number>('silenceTimeout', 0),

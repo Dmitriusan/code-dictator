@@ -84,6 +84,7 @@ function createMockStorage(overrides: Partial<Record<string, unknown>> = {}): St
       codeAwareMode: true,
       defaultTarget: 'clipboard',
       autoCopyToClipboard: true,
+      successfulTranscriptionSound: false,
       showCostIndicator: true,
       maxRecordingDuration: 300,
       silenceTimeout: 0,

@@ -40,6 +40,7 @@ export interface CodeDictatorSettings {
   codeAwareMode: boolean;
   defaultTarget: InjectionTarget;
   autoCopyToClipboard: boolean;
+  successfulTranscriptionSound: boolean;
   showCostIndicator: boolean;
   maxRecordingDuration: number;
   silenceTimeout: number;

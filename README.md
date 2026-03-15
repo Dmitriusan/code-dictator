@@ -139,6 +139,7 @@ For deeper cleanup (rephrasing, grammar, context-sensitive detection), enable **
 | `codeDictator.cleanupModel` | `gpt-4.1-nano` | OpenAI model for text cleanup |
 | `codeDictator.defaultTarget` | `clipboard` | `clipboard`, `editor` |
 | `codeDictator.autoCopyToClipboard` | `true` | Also copy to clipboard after insertion |
+| `codeDictator.successfulTranscriptionSound` | `false` | Play a short chime when transcription completes successfully |
 | `codeDictator.showCostIndicator` | `true` | Show estimated cost in status bar |
 | `codeDictator.maxRecordingDuration` | `300` | Max recording seconds (10–3600) |
 | `codeDictator.silenceTimeout` | `0` | Auto-stop after N seconds of silence (0 = off) |
