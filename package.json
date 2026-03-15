@@ -76,6 +76,10 @@
         "command": "codeDictator.configureLanguages",
         "title": "Code Dictator: Configure Preferred Languages",
         "icon": "$(globe)"
+      },
+      {
+        "command": "codeDictator.setCleanupApiKey",
+        "title": "Code Dictator: Set Cleanup API Key (OpenAI)"
       }
     ],
     "keybindings": [
@@ -99,7 +103,7 @@
           "default": "elevenlabs",
           "enum": ["elevenlabs", "openai", "custom"],
           "enumDescriptions": [
-            "ElevenLabs Scribe v2 — Best accuracy, 90+ languages (recommended)",
+            "ElevenLabs Scribe v2 — High accuracy, 90+ languages (recommended)",
             "OpenAI Whisper — Great alternative with existing OpenAI key",
             "Custom Whisper-compatible API endpoint"
           ],
@@ -113,9 +117,10 @@
         "codeDictator.recordingMode": {
           "type": "string",
           "default": "toggle",
-          "enum": ["toggle"],
+          "enum": ["toggle", "hold"],
           "enumDescriptions": [
-            "Press once to start recording, press again to stop"
+            "Press Alt+D once to start recording, press Alt+D again to stop and transcribe",
+            "Hold Alt+D to record — release the key to stop and transcribe automatically"
           ],
           "description": "Recording activation mode"
         },
@@ -151,13 +156,13 @@
         "codeDictator.autoCleanup": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Use an LLM to further clean up transcriptions (rephrase, fix grammar, remove context-sensitive fillers). **Requires an OpenAI API key.**\n\n*Note: Basic filler removal (uh, um, äh, ну, etc.) is always active — language-aware and free, no API needed.*"
+          "markdownDescription": "Use an AI language model to further clean up transcriptions (rephrase, fix grammar, remove context-sensitive fillers). **Requires an OpenAI API key** — [Set Cleanup API Key](command:codeDictator.setCleanupApiKey).\n\n*Note: Basic filler removal (uh, um, äh, ну, etc.) is always active — language-aware and free, no API needed.*"
         },
         "codeDictator.cleanupModel": {
           "type": "string",
           "default": "gpt-4.1-nano",
           "enum": ["gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1"],
-          "markdownDescription": "LLM model for text cleanup. Smaller models are cheaper and faster; larger models produce better results."
+          "markdownDescription": "OpenAI model for text cleanup. Smaller models are cheaper and faster; larger models produce better results."
         },
         "codeDictator.codeAwareMode": {
           "type": "boolean",
@@ -166,12 +171,11 @@
         },
         "codeDictator.defaultTarget": {
           "type": "string",
-          "default": "auto",
-          "enum": ["auto", "editor", "clipboard"],
+          "default": "clipboard",
+          "enum": ["clipboard", "editor"],
           "enumDescriptions": [
-            "Auto-detect: insert at cursor in focused editor or chat, fall back to clipboard",
-            "Always insert into active editor",
-            "Always copy to clipboard"
+            "Copy transcription to clipboard — paste wherever you need it",
+            "Insert at cursor in active text editor (may not work with AI chat panels)"
           ],
           "description": "Where to send transcribed text"
         },
