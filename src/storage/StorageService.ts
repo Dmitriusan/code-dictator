@@ -51,13 +51,13 @@ export class StorageService {
   getSettings(): CodeDictatorSettings {
     const config = vscode.workspace.getConfiguration('codeDictator');
     return {
-      provider: config.get<ProviderType>('provider', 'elevenlabs'),
+      provider: config.get<ProviderType>('speechToTextProvider', 'elevenlabs'),
       customApiUrl: config.get<string>('customApiUrl', ''),
       recordingMode: config.get<'toggle' | 'hold'>('recordingMode', 'toggle'),
       audioIsolation: config.get<'off' | 'basic' | 'aggressive'>('audioIsolation', 'basic'),
       language: config.get<string>('language', ''),
       preferredLanguages: config.get<string[]>('preferredLanguages', []),
-      autoCleanup: config.get<boolean>('autoCleanup', false),
+      aiTextCleanup: config.get<boolean>('aiTextCleanup', false),
       cleanupModel: config.get<string>('cleanupModel', 'gpt-4.1-nano'),
       codeAwareMode: config.get<boolean>('codeAwareMode', true),
       defaultTarget: config.get<'clipboard' | 'editor'>('defaultTarget', 'clipboard'),

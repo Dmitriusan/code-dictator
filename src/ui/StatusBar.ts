@@ -100,8 +100,9 @@ export class StatusBar implements vscode.Disposable {
    * Show a brief success message in the mic button, then revert to idle.
    * Non-intrusive — no popup, no modal, just a status bar flash.
    *
-   * When `success` is true the button turns green for the duration
-   * (text-only or solid background, depending on `successFlashBackground` setting).
+   * When `success` is true the button is highlighted for the duration
+   * (colored text or solid background, depending on `successFlashBackground` setting;
+   * exact colors are theme-dependent).
    * Duration is controlled by the `successFlashDuration` setting.
    */
   showTransientMessage(text: string, durationMs = 3000, success = false): void {

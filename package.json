@@ -1,7 +1,7 @@
 {
   "name": "code-dictator",
   "displayName": "Code Dictator",
-  "description": "Voice dictation for Claude, Copilot, Codex & Cline — speak instead of type",
+  "description": "Voice dictation for AI coding assistants — dictate prompts to Claude, Copilot, Codex & Cline from your desk, your kitchen, or your treadmill",
   "version": "1.0.0",
   "publisher": "irrationalways",
   "license": "MIT",
@@ -11,8 +11,8 @@
   "categories": ["Machine Learning", "Chat", "Other"],
   "keywords": [
     "voice", "dictation", "speech-to-text", "claude", "copilot",
-    "codex", "cline", "whisper", "elevenlabs", "voice coding",
-    "accessibility", "ai chat", "microphone", "transcription", "speech"
+    "voice coding", "whisper", "elevenlabs", "push-to-talk", "voice input",
+    "accessibility", "ai chat", "microphone", "transcription", "hands-free"
   ],
   "icon": "resources/icon.png",
   "repository": {
@@ -79,7 +79,7 @@
       },
       {
         "command": "codeDictator.setCleanupApiKey",
-        "title": "Code Dictator: Set Cleanup API Key (OpenAI)"
+        "title": "Code Dictator: Set OpenAI API Key (for LLM Cleanup)"
       }
     ],
     "keybindings": [
@@ -98,7 +98,7 @@
     "configuration": {
       "title": "Code Dictator",
       "properties": {
-        "codeDictator.provider": {
+        "codeDictator.speechToTextProvider": {
           "order": 1,
           "type": "string",
           "default": "elevenlabs",
@@ -108,7 +108,7 @@
             "OpenAI Whisper — Great alternative if you already have an API key",
             "Custom Whisper-compatible API endpoint"
           ],
-          "description": "Speech-to-text provider. After changing, you will be prompted for an API key on first recording."
+          "description": "Speech-to-text provider for voice transcription. After changing, you will be prompted for an API key on first recording."
         },
         "codeDictator.customApiUrl": {
           "order": 16,
@@ -117,7 +117,7 @@
           "description": "Custom Whisper-compatible API endpoint URL (e.g., http://localhost:8000/v1/audio/transcriptions)"
         },
         "codeDictator.language": {
-          "order": 2,
+          "order": 4,
           "type": "string",
           "default": "",
           "enum": ["", "en", "es", "fr", "de", "pt", "zh", "ja", "ko", "ru", "uk", "pl", "hi", "ar", "tr", "it", "nl", "sv", "da", "fi", "no", "cs", "ro", "hu", "el", "he", "th", "vi", "id", "ms", "bg", "hr", "sk", "sl", "sr", "ca", "ta", "bn"],
@@ -125,7 +125,7 @@
           "description": "Transcription language. Leave as Auto-detect for automatic language detection."
         },
         "codeDictator.preferredLanguages": {
-          "order": 10,
+          "order": 5,
           "type": "array",
           "items": {
             "type": "string",
@@ -137,7 +137,7 @@
           "uniqueItems": true
         },
         "codeDictator.recordingMode": {
-          "order": 3,
+          "order": 6,
           "type": "string",
           "default": "toggle",
           "enum": ["toggle", "hold"],
@@ -148,7 +148,7 @@
           "description": "Recording activation mode"
         },
         "codeDictator.defaultTarget": {
-          "order": 4,
+          "order": 7,
           "type": "string",
           "default": "clipboard",
           "enum": ["clipboard", "editor"],
@@ -159,13 +159,13 @@
           "description": "Where to send transcribed text"
         },
         "codeDictator.autoCopyToClipboard": {
-          "order": 5,
+          "order": 8,
           "type": "boolean",
           "default": true,
           "description": "Also copy transcription to clipboard (in addition to primary target)"
         },
         "codeDictator.audioIsolation": {
-          "order": 6,
+          "order": 9,
           "type": "string",
           "default": "basic",
           "enum": ["off", "basic", "aggressive"],
@@ -177,23 +177,23 @@
           "description": "Audio noise reduction level"
         },
         "codeDictator.codeAwareMode": {
-          "order": 7,
+          "order": 10,
           "type": "boolean",
           "default": true,
           "description": "Convert spoken code terms to symbols (e.g., 'open paren' → '(')"
         },
-        "codeDictator.autoCleanup": {
-          "order": 8,
+        "codeDictator.aiTextCleanup": {
+          "order": 2,
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Use an AI language model to further clean up transcriptions (rephrase, fix grammar, remove context-sensitive fillers). **Requires an OpenAI API key** — [Set Cleanup API Key](command:codeDictator.setCleanupApiKey).\n\n*Note: Basic filler removal (uh, um, äh, ну, etc.) is always active — language-aware and free, no API needed.*"
+          "markdownDescription": "**Highly recommended** — significantly improves transcription quality. After speech-to-text, sends the transcript through an OpenAI LLM to clean it up (rephrase, fix grammar, remove context-sensitive fillers). This is separate from the speech-to-text provider above. **Requires an OpenAI API key** — [Set OpenAI API Key](command:codeDictator.setCleanupApiKey).\n\n*Note: Basic filler removal (uh, um, äh, ну, etc.) is always active — language-aware and free, no API needed.*"
         },
         "codeDictator.cleanupModel": {
-          "order": 9,
+          "order": 3,
           "type": "string",
           "default": "gpt-4.1-nano",
           "enum": ["gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1"],
-          "markdownDescription": "OpenAI model for text cleanup. Smaller models are cheaper and faster; larger models produce better results."
+          "markdownDescription": "OpenAI LLM model used for post-transcription text cleanup (not speech-to-text). Smaller models are cheaper and faster; larger models produce better results."
         },
         "codeDictator.maxRecordingDuration": {
           "order": 12,
@@ -223,13 +223,13 @@
           "default": 5,
           "minimum": 1,
           "maximum": 30,
-          "description": "How many seconds the green success indicator stays visible after transcription completes"
+          "description": "How many seconds the success indicator stays visible after transcription completes"
         },
         "codeDictator.successFlashBackground": {
           "order": 15,
           "type": "boolean",
           "default": false,
-          "description": "Use a solid green background for the success indicator instead of green text"
+          "description": "Use a solid background for the success indicator instead of colored text (exact color depends on your theme)"
         },
         "codeDictator.diagnosticLogging": {
           "order": 17,

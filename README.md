@@ -1,8 +1,8 @@
 # Code Dictator
 
-Voice dictation for developers — speak code, commands, and prose directly into VS Code.
+Voice dictation for developers — speak instead of type when working with AI coding assistants.
 
-If you spend your day talking to AI coding assistants, why are you still typing? Press `Alt+D`, say what you mean, and Code Dictator puts the text exactly where you need it — Claude Chat, Copilot Chat, your editor, or any input field. Transcription returns in seconds. Zero native dependencies. 33KB. Works on macOS, Windows, and Linux.
+If you spend your day talking to AI coding assistants, why are you still typing? Press `Alt+D`, speak, press `Alt+D` again — your speech is transcribed and copied to the clipboard in seconds. Paste it into Claude Chat, Copilot Chat, Cursor, Windsurf, a terminal, or any input field. Zero native dependencies. Works on macOS, Windows, and Linux.
 
 ---
 
@@ -11,6 +11,7 @@ If you spend your day talking to AI coding assistants, why are you still typing?
 A professional developer types around 60–80 words per minute. You speak at 150+. That's not a marginal improvement — it's a fundamentally different workflow.
 
 - **A one-minute typed prompt takes 20–30 seconds to dictate.** Over a full day of AI-assisted development, that adds up to 30–60 minutes saved.
+- **Code from anywhere.** Put on wireless headphones and your development environment follows you. Dictate a prompt while grabbing coffee in the kitchen. Describe a feature while folding laundry. Sketch out an architecture while going for a walk. Your AI assistant doesn't care whether you're at your desk — and now, neither do you.
 - **Less fatigue.** Your hands stay on the keyboard for the work that matters — reviewing diffs, navigating code, running commands. Let your voice handle the natural-language parts.
 - **Lower friction, better prompts.** When dictating is effortless, you write more detailed prompts and get better results from your AI assistant.
 
@@ -46,7 +47,7 @@ A professional developer types around 60–80 words per minute. You speak at 150
 
 3. **Configure** — Open VS Code Settings (`Ctrl+,`), search "Code Dictator", select your provider, then run `Code Dictator: Set API Key` from the Command Palette to store your key securely.
 
-4. **Dictate** — Click into any input field — Claude Chat, Copilot Chat, your editor. Press `Alt+D`, speak, press `Alt+D` again. Text appears at the cursor.
+4. **Dictate** — Press `Alt+D`, speak, press `Alt+D` again. The transcription is copied to your clipboard — just `Ctrl+V` into Claude Chat, Copilot Chat, Cursor, Windsurf, a terminal, or any other input.
 
 That's it. No system dependencies to install, no microphone configuration, no browser extensions.
 
@@ -109,7 +110,7 @@ When code-aware mode is enabled (default: on), spoken programming terms convert 
 > **Say**: "if open paren error triple equals null close paren"
 > **Inserted**: `if (error === null)`
 
-When dictating into Claude Chat or Copilot Chat, disable code-aware mode or speak naturally — the AI handles code generation from plain-language prompts.
+When dictating prompts for AI assistants, disable code-aware mode or speak naturally — the AI handles code generation from plain-language prompts.
 
 ---
 
@@ -119,7 +120,7 @@ Code Dictator automatically strips hesitation markers from your transcription �
 
 Covers 90+ languages — English `uh/um/er/hmm`, German `äh/ähm`, French `euh/heu`, Russian `ну/значит`, Japanese `えーと/あの`, and many more. Also removes stutter patterns (`u-uh`, `m-uh`) and bracketed noise markers (`[cough]`, `[engine revving]`).
 
-For deeper cleanup (rephrasing, grammar, context-sensitive detection), enable **AI-powered Cleanup** (`codeDictator.autoCleanup`) which uses an OpenAI API call.
+For deeper cleanup (rephrasing, grammar, context-sensitive detection), enable **AI-powered Cleanup** (`codeDictator.aiTextCleanup`) which uses an OpenAI API call.
 
 ---
 
@@ -127,14 +128,14 @@ For deeper cleanup (rephrasing, grammar, context-sensitive detection), enable **
 
 | Setting | Default | Description |
 |---|---|---|
-| `codeDictator.provider` | `elevenlabs` | `elevenlabs`, `openai`, `custom` |
+| `codeDictator.speechToTextProvider` | `elevenlabs` | `elevenlabs`, `openai`, `custom` |
 | `codeDictator.customApiUrl` | *(empty)* | Whisper-compatible endpoint URL |
 | `codeDictator.recordingMode` | `toggle` | Press once to start, once to stop |
 | `codeDictator.audioIsolation` | `basic` | `off`, `basic`, `aggressive` |
 | `codeDictator.language` | *(auto)* | Language code (e.g. `en`, `de`, `ja`) or leave blank for auto-detect |
 | `codeDictator.preferredLanguages` | `[]` | Shortlist for the language picker |
 | `codeDictator.codeAwareMode` | `true` | Spoken-to-symbol conversion |
-| `codeDictator.autoCleanup` | `false` | Optional AI-powered cleanup (requires OpenAI key; basic filler removal is always on) |
+| `codeDictator.aiTextCleanup` | `false` | Optional AI-powered cleanup (requires OpenAI key; basic filler removal is always on) |
 | `codeDictator.cleanupModel` | `gpt-4.1-nano` | OpenAI model for text cleanup |
 | `codeDictator.defaultTarget` | `clipboard` | `clipboard`, `editor` |
 | `codeDictator.autoCopyToClipboard` | `true` | Also copy to clipboard after insertion |

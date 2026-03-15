@@ -8,7 +8,7 @@
  * Covers all languages supported by ElevenLabs Scribe v2 (90+) and
  * OpenAI Whisper (57). Conservative selection — only words that are
  * unambiguously hesitation markers, not common vocabulary. LLM cleanup
- * (codeDictator.autoCleanup) handles subtler cases.
+ * (codeDictator.aiTextCleanup) handles subtler cases.
  */
 
 function esc(s: string): string {

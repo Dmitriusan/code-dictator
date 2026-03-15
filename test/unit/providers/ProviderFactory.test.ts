@@ -16,7 +16,7 @@ function makeSettings(overrides: Partial<CodeDictatorSettings> = {}): CodeDictat
     audioIsolation: 'basic',
     language: '',
     preferredLanguages: [],
-    autoCleanup: false,
+    aiTextCleanup: false,
     cleanupModel: 'gpt-4.1-nano',
     codeAwareMode: true,
     defaultTarget: 'clipboard',

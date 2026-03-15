@@ -18,7 +18,7 @@ vi.mock('vscode', () => {
           audioIsolation: 'basic',
           language: '',
           preferredLanguages: [],
-          autoCleanup: false,
+          aiTextCleanup: false,
           cleanupModel: 'gpt-4.1-nano',
           codeAwareMode: true,
           defaultTarget: 'clipboard',
@@ -38,7 +38,7 @@ vi.mock('vscode', () => {
         audioIsolation: 'basic',
         language: '',
         preferredLanguages: [],
-        autoCleanup: false,
+        aiTextCleanup: false,
         cleanupModel: 'gpt-4.1-nano',
         codeAwareMode: true,
         defaultTarget: 'clipboard',
@@ -97,7 +97,7 @@ describe('StorageService', () => {
       expect(settings.audioIsolation).toBe('basic');
       expect(settings.language).toBe('');
       expect(settings.preferredLanguages).toEqual([]);
-      expect(settings.autoCleanup).toBe(false);
+      expect(settings.aiTextCleanup).toBe(false);
       expect(settings.codeAwareMode).toBe(true);
       expect(settings.defaultTarget).toBe('clipboard');
       expect(settings.autoCopyToClipboard).toBe(true);

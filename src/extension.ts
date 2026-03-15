@@ -318,7 +318,7 @@ async function handleStopAndTranscribe(): Promise<void> {
     }
 
     // Step 4: AI-powered cleanup (optional)
-    if (settings.autoCleanup) {
+    if (settings.aiTextCleanup) {
       const cleanupKey = await storageService.getApiKey('openai-cleanup')
         || await storageService.getApiKey('openai');
       if (cleanupKey) {
@@ -334,10 +334,10 @@ async function handleStopAndTranscribe(): Promise<void> {
       } else if (!cleanupKeyWarningShown) {
         cleanupKeyWarningShown = true;
         const action = await vscode.window.showWarningMessage(
-          'Auto Cleanup is enabled but no OpenAI API key is configured.',
-          'Set Cleanup API Key',
+          'AI Text Cleanup is enabled but no OpenAI API key is configured.',
+          'Set OpenAI API Key',
         );
-        if (action === 'Set Cleanup API Key') {
+        if (action === 'Set OpenAI API Key') {
           vscode.commands.executeCommand('codeDictator.setCleanupApiKey');
         }
       }
@@ -443,7 +443,7 @@ async function handleTranscribeFile(): Promise<void> {
       text = applyCodeAware(text);
     }
 
-    if (settings.autoCleanup) {
+    if (settings.aiTextCleanup) {
       const cleanupKey = await storageService.getApiKey('openai-cleanup')
         || await storageService.getApiKey('openai');
       if (cleanupKey) {
@@ -456,10 +456,10 @@ async function handleTranscribeFile(): Promise<void> {
       } else if (!cleanupKeyWarningShown) {
         cleanupKeyWarningShown = true;
         const action = await vscode.window.showWarningMessage(
-          'Auto Cleanup is enabled but no OpenAI API key is configured.',
-          'Set Cleanup API Key',
+          'AI Text Cleanup is enabled but no OpenAI API key is configured.',
+          'Set OpenAI API Key',
         );
-        if (action === 'Set Cleanup API Key') {
+        if (action === 'Set OpenAI API Key') {
           vscode.commands.executeCommand('codeDictator.setCleanupApiKey');
         }
       }

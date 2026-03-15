@@ -21,7 +21,7 @@ vi.mock('vscode', () => ({
       getConfiguration: vi.fn(() => ({
         update: mockConfigUpdate,
         get: vi.fn((key: string, defaultValue?: unknown) => {
-          if (key === 'provider') return 'elevenlabs';
+          if (key === 'speechToTextProvider') return 'elevenlabs';
           if (key === 'customApiUrl') return 'http://localhost:8000';
           return defaultValue;
         }),
@@ -46,7 +46,7 @@ vi.mock('vscode', () => ({
     getConfiguration: vi.fn(() => ({
       update: mockConfigUpdate,
       get: vi.fn((key: string, defaultValue?: unknown) => {
-        if (key === 'provider') return 'elevenlabs';
+        if (key === 'speechToTextProvider') return 'elevenlabs';
         if (key === 'customApiUrl') return 'http://localhost:8000';
         return defaultValue;
       }),
@@ -79,7 +79,7 @@ function createMockStorage(overrides: Partial<Record<string, unknown>> = {}): St
       audioIsolation: 'basic',
       language: '',
       preferredLanguages: [],
-      autoCleanup: false,
+      aiTextCleanup: false,
       cleanupModel: 'gpt-4.1-nano',
       codeAwareMode: true,
       defaultTarget: 'clipboard',
@@ -125,7 +125,7 @@ describe('SetupWizard', () => {
     (storage.getApiKey as ReturnType<typeof vi.fn>).mockResolvedValue('xi-test-key-1234567890');
 
     await runSetupWizard(storage);
-    expect(mockConfigUpdate).toHaveBeenCalledWith('provider', 'elevenlabs', 1);
+    expect(mockConfigUpdate).toHaveBeenCalledWith('speechToTextProvider', 'elevenlabs', 1);
   });
 
   it('returns false when user cancels ElevenLabs info message', async () => {
@@ -174,7 +174,7 @@ describe('SetupWizard', () => {
     (storage.getApiKey as ReturnType<typeof vi.fn>).mockResolvedValue('sk-test123456');
 
     await runSetupWizard(storage);
-    expect(mockConfigUpdate).toHaveBeenCalledWith('provider', 'openai', 1);
+    expect(mockConfigUpdate).toHaveBeenCalledWith('speechToTextProvider', 'openai', 1);
     expect(storage.setApiKey).toHaveBeenCalledWith('openai', 'sk-test123456');
   });
 
@@ -186,7 +186,7 @@ describe('SetupWizard', () => {
     storage = createMockStorage({ provider: 'custom', customApiUrl: 'http://localhost:8000/v1/audio/transcriptions' });
 
     await runSetupWizard(storage);
-    expect(mockConfigUpdate).toHaveBeenCalledWith('provider', 'custom', 1);
+    expect(mockConfigUpdate).toHaveBeenCalledWith('speechToTextProvider', 'custom', 1);
     expect(mockConfigUpdate).toHaveBeenCalledWith(
       'customApiUrl',
       'http://localhost:8000/v1/audio/transcriptions',

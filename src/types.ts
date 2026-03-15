@@ -35,7 +35,7 @@ export interface CodeDictatorSettings {
   audioIsolation: AudioIsolation;
   language: string;
   preferredLanguages: string[];
-  autoCleanup: boolean;
+  aiTextCleanup: boolean;
   cleanupModel: string;
   codeAwareMode: boolean;
   defaultTarget: InjectionTarget;

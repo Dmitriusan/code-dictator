@@ -9,7 +9,7 @@ All notable changes to Code Dictator will be documented in this file.
 - ElevenLabs Scribe v2 integration (recommended provider)
 - OpenAI Whisper integration
 - Custom Whisper-compatible API support
-- Text injection into Claude Chat, Copilot Chat, editors, and any focused input
+- Transcription copied to clipboard for easy pasting into any input — Claude Chat, Copilot Chat, editors, terminals
 - Audio isolation with three modes: off, basic (browser-native), aggressive (multi-stage filtering)
 - Code-aware dictation with 50+ spoken-to-symbol mappings
 - LLM text cleanup (optional, via OpenAI)

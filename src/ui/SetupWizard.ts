@@ -42,7 +42,7 @@ export async function runSetupWizard(storage: StorageService): Promise<boolean> 
 
   // Update provider setting
   const config = vscode.workspace.getConfiguration('codeDictator');
-  await config.update('provider', providerId, vscode.ConfigurationTarget.Global);
+  await config.update('speechToTextProvider', providerId, vscode.ConfigurationTarget.Global);
 
   // Step 2: Get API key (provider-specific flow)
   if (providerId === 'elevenlabs') {
