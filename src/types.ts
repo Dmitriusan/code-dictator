@@ -22,9 +22,9 @@ export interface STTProvider {
 }
 
 // Recording types
-export type RecordingMode = 'toggle';
+export type RecordingMode = 'toggle' | 'hold';
 export type AudioIsolation = 'off' | 'basic' | 'aggressive';
-export type InjectionTarget = 'auto' | 'editor' | 'clipboard';
+export type InjectionTarget = 'clipboard' | 'editor';
 export type ProviderType = 'elevenlabs' | 'openai' | 'custom';
 
 // Settings

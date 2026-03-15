@@ -22,11 +22,8 @@ export class TextInjector {
         destination = await this.insertIntoEditor(text);
         break;
       case 'clipboard':
-        destination = await this.copyToClipboard(text);
-        break;
-      case 'auto':
       default:
-        destination = await this.autoInject(text);
+        destination = await this.copyToClipboard(text);
         break;
     }
 
@@ -36,25 +33,6 @@ export class TextInjector {
     }
 
     return destination;
-  }
-
-  private async autoInject(text: string): Promise<string> {
-    // First try: use the `type` command which works in editors, chat inputs, etc.
-    try {
-      await vscode.commands.executeCommand('type', { text });
-      return 'active input';
-    } catch {
-      // `type` command failed — no focused text input
-    }
-
-    // Second try: insert into active text editor
-    const editor = vscode.window.activeTextEditor;
-    if (editor) {
-      return this.insertIntoEditor(text);
-    }
-
-    // Fallback: clipboard
-    return this.copyToClipboard(text);
   }
 
   private async insertIntoEditor(text: string): Promise<string> {

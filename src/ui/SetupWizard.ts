@@ -16,7 +16,7 @@ export async function runSetupWizard(storage: StorageService): Promise<boolean> 
     {
       label: '$(star-full) ElevenLabs',
       description: 'Recommended',
-      detail: 'Best-in-class accuracy with Scribe v2 — 96.7% word accuracy, 90+ languages',
+      detail: 'High accuracy with Scribe v2, 90+ languages, free tier available',
       providerId: 'elevenlabs',
     },
     {

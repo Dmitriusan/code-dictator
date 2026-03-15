@@ -13,6 +13,7 @@ import { applyCodeAware } from './postprocess/CodeAware';
 import { cleanup as llmCleanup } from './postprocess/LLMCleanup';
 import { showLanguagePicker, showLanguageConfigurator } from './ui/LanguagePicker';
 import { runSetupWizard } from './ui/SetupWizard';
+import { HoldModeController } from './recorder/HoldModeController';
 import type { TranscriptionResult } from './types';
 
 let storageService: StorageService;
@@ -21,6 +22,7 @@ let recorder: RecorderManager;
 let usageTracker: UsageTracker;
 let historyManager: HistoryManager;
 let textInjector: TextInjector;
+let holdController: HoldModeController;
 let cleanupKeyWarningShown = false;
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -31,6 +33,15 @@ export function activate(context: vscode.ExtensionContext): void {
   usageTracker = new UsageTracker(storageService);
   historyManager = new HistoryManager(storageService);
   textInjector = new TextInjector();
+  holdController = new HoldModeController();
+
+  // Wire hold-mode callbacks
+  holdController.onStart(() => handleStartRecording());
+  holdController.onRelease(() => {
+    if (recorder.isRecording) {
+      handleStopAndTranscribe();
+    }
+  });
 
   // Push disposables
   context.subscriptions.push(statusBar);
@@ -65,10 +76,20 @@ export function activate(context: vscode.ExtensionContext): void {
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('codeDictator.toggleRecording', () => {
-      if (recorder.isRecording) {
-        handleStopAndTranscribe();
+      const settings = storageService.getSettings();
+
+      if (settings.recordingMode === 'hold') {
+        // Hold mode: each keydown (initial + OS repeats) goes through the
+        // debounce controller. First press starts recording; when repeats
+        // stop (key released), the controller fires the release callback.
+        holdController.handleKeyDown();
       } else {
-        handleStartRecording();
+        // Toggle mode: explicit start/stop on each press
+        if (recorder.isRecording) {
+          handleStopAndTranscribe();
+        } else {
+          handleStartRecording();
+        }
       }
     }),
   );
@@ -76,6 +97,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('codeDictator.cancelRecording', () => {
       if (recorder.isRecording) {
+        holdController.cancel(); // no-op if not in hold mode
         recorder.cancelRecording();
         statusBar.updateState('idle');
         vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
@@ -121,6 +143,23 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('codeDictator.setApiKey', async () => {
       await runSetupWizard(storageService);
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.setCleanupApiKey', async () => {
+      const key = await vscode.window.showInputBox({
+        title: 'Code Dictator — Cleanup API Key (OpenAI)',
+        prompt: 'Paste your OpenAI API key for LLM cleanup (stored securely in your OS keychain)',
+        password: true,
+        placeHolder: 'sk-...',
+        ignoreFocusOut: true,
+        validateInput: (v) => !v.trim().startsWith('sk-') ? 'OpenAI keys start with sk-' : undefined,
+      });
+      if (key) {
+        await storageService.setApiKey('openai-cleanup', key.trim());
+        vscode.window.setStatusBarMessage('$(check) Code Dictator: Cleanup API key saved.', 3000);
+      }
     }),
   );
 
@@ -243,23 +282,25 @@ async function handleStopAndTranscribe(): Promise<void> {
       text = applyCodeAware(text);
     }
 
-    // Step 4: LLM cleanup (optional)
+    // Step 4: AI-powered cleanup (optional)
     if (settings.autoCleanup) {
-      const openaiKey = await storageService.getApiKey('openai');
-      if (openaiKey) {
+      const cleanupKey = await storageService.getApiKey('openai-cleanup')
+        || await storageService.getApiKey('openai');
+      if (cleanupKey) {
+        statusBar.updateState('cleaning');
         try {
-          text = await llmCleanup(text, openaiKey, settings.cleanupModel);
+          text = await llmCleanup(text, cleanupKey, settings.cleanupModel);
         } catch (error) {
-          console.warn('Code Dictator: LLM cleanup failed, using raw text', error);
+          console.warn('Code Dictator: AI cleanup failed, using raw text', error);
         }
       } else if (!cleanupKeyWarningShown) {
         cleanupKeyWarningShown = true;
         const action = await vscode.window.showWarningMessage(
-          'Auto Cleanup is enabled but no OpenAI API key is configured. Transcriptions will not be cleaned up.',
-          'Set API Key',
+          'Auto Cleanup is enabled but no OpenAI API key is configured.',
+          'Set Cleanup API Key',
         );
-        if (action === 'Set API Key') {
-          vscode.commands.executeCommand('codeDictator.setApiKey');
+        if (action === 'Set Cleanup API Key') {
+          vscode.commands.executeCommand('codeDictator.setCleanupApiKey');
         }
       }
     }
@@ -365,21 +406,23 @@ async function handleTranscribeFile(): Promise<void> {
     }
 
     if (settings.autoCleanup) {
-      const openaiKey = await storageService.getApiKey('openai');
-      if (openaiKey) {
+      const cleanupKey = await storageService.getApiKey('openai-cleanup')
+        || await storageService.getApiKey('openai');
+      if (cleanupKey) {
+        statusBar.updateState('cleaning');
         try {
-          text = await llmCleanup(text, openaiKey, settings.cleanupModel);
+          text = await llmCleanup(text, cleanupKey, settings.cleanupModel);
         } catch {
           // Fall through with raw text
         }
       } else if (!cleanupKeyWarningShown) {
         cleanupKeyWarningShown = true;
         const action = await vscode.window.showWarningMessage(
-          'Auto Cleanup is enabled but no OpenAI API key is configured. Transcriptions will not be cleaned up.',
-          'Set API Key',
+          'Auto Cleanup is enabled but no OpenAI API key is configured.',
+          'Set Cleanup API Key',
         );
-        if (action === 'Set API Key') {
-          vscode.commands.executeCommand('codeDictator.setApiKey');
+        if (action === 'Set Cleanup API Key') {
+          vscode.commands.executeCommand('codeDictator.setCleanupApiKey');
         }
       }
     }
