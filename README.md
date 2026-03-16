@@ -1,5 +1,10 @@
 # Code Dictator
 
+[![VS Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/irrationalways.code-dictator)](https://marketplace.visualstudio.com/items?itemName=irrationalways.code-dictator)
+[![VS Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/irrationalways.code-dictator)](https://marketplace.visualstudio.com/items?itemName=irrationalways.code-dictator)
+[![GitHub stars](https://img.shields.io/github/stars/Dmitriusan/code-dictator)](https://github.com/Dmitriusan/code-dictator)
+[![License](https://img.shields.io/github/license/Dmitriusan/code-dictator)](https://github.com/Dmitriusan/code-dictator/blob/main/LICENSE)
+
 **Stop typing prompts. Start speaking them.**
 
 You talk to AI all day. Claude, Copilot, Cursor, Windsurf — they all understand natural language. So why are you still typing at 70 words per minute when you speak at 150?
