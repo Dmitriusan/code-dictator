@@ -2,6 +2,7 @@
 
 [![VS Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/irrationalways.code-dictator)](https://marketplace.visualstudio.com/items?itemName=irrationalways.code-dictator)
 [![VS Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/irrationalways.code-dictator)](https://marketplace.visualstudio.com/items?itemName=irrationalways.code-dictator)
+[![CI](https://github.com/Dmitriusan/code-dictator/actions/workflows/ci.yml/badge.svg)](https://github.com/Dmitriusan/code-dictator/actions/workflows/ci.yml)
 [![GitHub stars](https://img.shields.io/github/stars/Dmitriusan/code-dictator)](https://github.com/Dmitriusan/code-dictator)
 [![License](https://img.shields.io/github/license/Dmitriusan/code-dictator)](https://github.com/Dmitriusan/code-dictator/blob/main/LICENSE)
 
