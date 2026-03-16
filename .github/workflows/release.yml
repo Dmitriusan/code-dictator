@@ -32,6 +32,7 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Create GitHub Release
+        if: always() && !cancelled()
         uses: softprops/action-gh-release@v2
         with:
           files: '*.vsix'
