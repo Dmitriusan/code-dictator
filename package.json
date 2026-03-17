@@ -2,17 +2,33 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cursor, or any AI chat. Zero dependencies, 37 languages.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Machine Learning", "Chat", "Other"],
+  "categories": [
+    "Machine Learning",
+    "Chat",
+    "Other"
+  ],
   "keywords": [
-    "voice", "dictation", "speech-to-text", "voice coding", "push-to-talk",
-    "whisper", "transcription", "microphone", "hands-free", "accessibility",
-    "claude", "copilot", "cursor", "windsurf", "cline"
+    "voice",
+    "dictation",
+    "speech-to-text",
+    "voice coding",
+    "push-to-talk",
+    "whisper",
+    "transcription",
+    "microphone",
+    "hands-free",
+    "accessibility",
+    "claude",
+    "copilot",
+    "cursor",
+    "windsurf",
+    "cline"
   ],
   "icon": "resources/icon.png",
   "repository": {
@@ -30,7 +46,9 @@
     "name": "Dmytro Lisnichenko",
     "url": "https://github.com/Dmitriusan"
   },
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -102,7 +120,11 @@
           "order": 1,
           "type": "string",
           "default": "elevenlabs",
-          "enum": ["elevenlabs", "openai", "custom"],
+          "enum": [
+            "elevenlabs",
+            "openai",
+            "custom"
+          ],
           "enumDescriptions": [
             "ElevenLabs Scribe v2 — High accuracy, 90+ languages (recommended)",
             "OpenAI Whisper — Great alternative if you already have an API key",
@@ -120,8 +142,86 @@
           "order": 4,
           "type": "string",
           "default": "",
-          "enum": ["", "en", "es", "fr", "de", "pt", "zh", "ja", "ko", "ru", "uk", "pl", "hi", "ar", "tr", "it", "nl", "sv", "da", "fi", "no", "cs", "ro", "hu", "el", "he", "th", "vi", "id", "ms", "bg", "hr", "sk", "sl", "sr", "ca", "ta", "bn"],
-          "enumItemLabels": ["Auto-detect", "English", "Spanish", "French", "German", "Portuguese", "Chinese", "Japanese", "Korean", "Russian", "Ukrainian", "Polish", "Hindi", "Arabic", "Turkish", "Italian", "Dutch", "Swedish", "Danish", "Finnish", "Norwegian", "Czech", "Romanian", "Hungarian", "Greek", "Hebrew", "Thai", "Vietnamese", "Indonesian", "Malay", "Bulgarian", "Croatian", "Slovak", "Slovenian", "Serbian", "Catalan", "Tamil", "Bengali"],
+          "enum": [
+            "",
+            "en",
+            "es",
+            "fr",
+            "de",
+            "pt",
+            "zh",
+            "ja",
+            "ko",
+            "ru",
+            "uk",
+            "pl",
+            "hi",
+            "ar",
+            "tr",
+            "it",
+            "nl",
+            "sv",
+            "da",
+            "fi",
+            "no",
+            "cs",
+            "ro",
+            "hu",
+            "el",
+            "he",
+            "th",
+            "vi",
+            "id",
+            "ms",
+            "bg",
+            "hr",
+            "sk",
+            "sl",
+            "sr",
+            "ca",
+            "ta",
+            "bn"
+          ],
+          "enumItemLabels": [
+            "Auto-detect",
+            "English",
+            "Spanish",
+            "French",
+            "German",
+            "Portuguese",
+            "Chinese",
+            "Japanese",
+            "Korean",
+            "Russian",
+            "Ukrainian",
+            "Polish",
+            "Hindi",
+            "Arabic",
+            "Turkish",
+            "Italian",
+            "Dutch",
+            "Swedish",
+            "Danish",
+            "Finnish",
+            "Norwegian",
+            "Czech",
+            "Romanian",
+            "Hungarian",
+            "Greek",
+            "Hebrew",
+            "Thai",
+            "Vietnamese",
+            "Indonesian",
+            "Malay",
+            "Bulgarian",
+            "Croatian",
+            "Slovak",
+            "Slovenian",
+            "Serbian",
+            "Catalan",
+            "Tamil",
+            "Bengali"
+          ],
           "description": "Transcription language. Leave as Auto-detect for automatic language detection."
         },
         "codeDictator.preferredLanguages": {
@@ -129,8 +229,84 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["en", "es", "fr", "de", "pt", "zh", "ja", "ko", "ru", "uk", "pl", "hi", "ar", "tr", "it", "nl", "sv", "da", "fi", "no", "cs", "ro", "hu", "el", "he", "th", "vi", "id", "ms", "bg", "hr", "sk", "sl", "sr", "ca", "ta", "bn"],
-            "enumItemLabels": ["English", "Spanish", "French", "German", "Portuguese", "Chinese", "Japanese", "Korean", "Russian", "Ukrainian", "Polish", "Hindi", "Arabic", "Turkish", "Italian", "Dutch", "Swedish", "Danish", "Finnish", "Norwegian", "Czech", "Romanian", "Hungarian", "Greek", "Hebrew", "Thai", "Vietnamese", "Indonesian", "Malay", "Bulgarian", "Croatian", "Slovak", "Slovenian", "Serbian", "Catalan", "Tamil", "Bengali"]
+            "enum": [
+              "en",
+              "es",
+              "fr",
+              "de",
+              "pt",
+              "zh",
+              "ja",
+              "ko",
+              "ru",
+              "uk",
+              "pl",
+              "hi",
+              "ar",
+              "tr",
+              "it",
+              "nl",
+              "sv",
+              "da",
+              "fi",
+              "no",
+              "cs",
+              "ro",
+              "hu",
+              "el",
+              "he",
+              "th",
+              "vi",
+              "id",
+              "ms",
+              "bg",
+              "hr",
+              "sk",
+              "sl",
+              "sr",
+              "ca",
+              "ta",
+              "bn"
+            ],
+            "enumItemLabels": [
+              "English",
+              "Spanish",
+              "French",
+              "German",
+              "Portuguese",
+              "Chinese",
+              "Japanese",
+              "Korean",
+              "Russian",
+              "Ukrainian",
+              "Polish",
+              "Hindi",
+              "Arabic",
+              "Turkish",
+              "Italian",
+              "Dutch",
+              "Swedish",
+              "Danish",
+              "Finnish",
+              "Norwegian",
+              "Czech",
+              "Romanian",
+              "Hungarian",
+              "Greek",
+              "Hebrew",
+              "Thai",
+              "Vietnamese",
+              "Indonesian",
+              "Malay",
+              "Bulgarian",
+              "Croatian",
+              "Slovak",
+              "Slovenian",
+              "Serbian",
+              "Catalan",
+              "Tamil",
+              "Bengali"
+            ]
           },
           "default": [],
           "description": "Your preferred languages for quick switching. Only these appear in the language picker. Use \"Code Dictator: Configure Languages\" command for a visual picker.",
@@ -140,7 +316,10 @@
           "order": 6,
           "type": "string",
           "default": "toggle",
-          "enum": ["toggle", "hold"],
+          "enum": [
+            "toggle",
+            "hold"
+          ],
           "enumDescriptions": [
             "Press Alt+D once to start recording, press Alt+D again to stop and transcribe",
             "Hold Alt+D to record — release the key to stop and transcribe automatically"
@@ -151,7 +330,10 @@
           "order": 7,
           "type": "string",
           "default": "clipboard",
-          "enum": ["clipboard", "editor"],
+          "enum": [
+            "clipboard",
+            "editor"
+          ],
           "enumDescriptions": [
             "Copy transcription to clipboard — paste wherever you need it",
             "Insert at cursor in active text editor (may not work with AI chat panels)"
@@ -168,7 +350,11 @@
           "order": 9,
           "type": "string",
           "default": "basic",
-          "enum": ["off", "basic", "aggressive"],
+          "enum": [
+            "off",
+            "basic",
+            "aggressive"
+          ],
           "enumDescriptions": [
             "No noise reduction — raw audio",
             "Browser-native noise suppression and echo cancellation",
@@ -192,7 +378,11 @@
           "order": 3,
           "type": "string",
           "default": "gpt-4.1-nano",
-          "enum": ["gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1"],
+          "enum": [
+            "gpt-4.1-nano",
+            "gpt-4.1-mini",
+            "gpt-4.1"
+          ],
           "markdownDescription": "OpenAI LLM model used for post-transcription text cleanup (not speech-to-text). Smaller models are cheaper and faster; larger models produce better results."
         },
         "codeDictator.maxRecordingDuration": {
@@ -255,32 +445,43 @@
             "id": "chooseProvider",
             "title": "Choose Your Provider",
             "description": "Select a speech-to-text provider. We recommend ElevenLabs for best accuracy.\n\n[Open Settings](command:codeDictator.openSettings)",
-            "media": { "markdown": "resources/walkthrough/provider.md" }
+            "media": {
+              "markdown": "resources/walkthrough/provider.md"
+            }
           },
           {
             "id": "setApiKey",
             "title": "Set Your API Key",
             "description": "Enter your API key securely. It's stored in your OS keychain.\n\n[Set API Key](command:codeDictator.setApiKey)",
-            "media": { "markdown": "resources/walkthrough/apikey.md" }
+            "media": {
+              "markdown": "resources/walkthrough/apikey.md"
+            }
           },
           {
             "id": "tryRecording",
             "title": "Try Voice Recording",
             "description": "Press **Alt+D** or click the mic icon in the status bar to start recording.\n\n[Toggle Recording](command:codeDictator.toggleRecording)",
-            "media": { "markdown": "resources/walkthrough/record.md" }
+            "media": {
+              "markdown": "resources/walkthrough/record.md"
+            }
           },
           {
             "id": "customize",
             "title": "Customize",
             "description": "Set your preferred languages, recording mode, and more.\n\n[Open Settings](command:codeDictator.openSettings)",
-            "media": { "markdown": "resources/walkthrough/customize.md" }
+            "media": {
+              "markdown": "resources/walkthrough/customize.md"
+            }
           }
         ]
       }
     ],
     "menus": {
       "commandPalette": [
-        { "command": "codeDictator.cancelRecording", "when": "codeDictator.isRecording" }
+        {
+          "command": "codeDictator.cancelRecording",
+          "when": "codeDictator.isRecording"
+        }
       ]
     }
   },
