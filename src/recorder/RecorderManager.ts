@@ -81,16 +81,13 @@ export class RecorderManager implements vscode.Disposable {
     try {
       await this.ensurePanel();
 
-      // Start recording with a short timeout to detect permission errors quickly.
-      // We intercept errors via permissionErrorHandler so they don't reach external
-      // onError listeners (which would show an error popup before the fallback runs).
+      // Start recording with a short timeout to detect errors quickly.
+      // We intercept ALL webview errors during the startup window so they don't
+      // reach external onError listeners (which would show an error popup before
+      // the native fallback gets a chance to run).
       await new Promise<void>((resolve, reject) => {
         this.permissionErrorHandler = (msg: string) => {
-          if (msg.includes('permission denied') || msg.includes('Permission denied') ||
-              msg.includes('NotAllowedError') || msg.includes('Microphone') ||
-              msg.includes('getUserMedia')) {
-            reject(new Error(msg));
-          }
+          reject(new Error(msg));
         };
 
         const message: MessageToWebview = {
@@ -109,20 +106,23 @@ export class RecorderManager implements vscode.Disposable {
         }, 2000);
       });
     } catch (webviewError) {
-      // Webview mic permission failed — try native fallback (arecord/sox)
+      // Webview recording failed — try native fallback (arecord/sox)
       this.permissionErrorHandler = undefined;
       this._isRecording = false;
       if (this.panel) {
         this.panel.webview.postMessage({ type: 'cancelRecording' } as MessageToWebview);
       }
 
+      const errorMsg = webviewError instanceof Error ? webviewError.message : String(webviewError);
+      diagLog('RecorderManager', `Webview recorder failed: ${errorMsg}`);
+
       if (NativeRecorder.isAvailable()) {
-        diagLog('RecorderManager', 'Webview mic denied, falling back to native recorder');
+        diagLog('RecorderManager', 'Falling back to native recorder');
         return this.startNativeRecording(silenceTimeout, maxDuration);
       }
 
       throw new Error(
-        'Microphone permission denied. Please allow microphone access in your browser/OS settings, or install arecord (Linux) / sox (macOS/Windows).'
+        `Microphone unavailable: ${errorMsg}. Please check your audio devices, or install arecord (Linux) / sox (macOS/Windows).`
       );
     }
   }

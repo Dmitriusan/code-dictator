@@ -157,6 +157,11 @@ export function activate(context: vscode.ExtensionContext): void {
         // Cancel in-flight transcription or AI cleanup
         diagLog('Extension', 'Cancelling transcription/cleanup pipeline');
         pipelineAbort.abort();
+      } else {
+        // Defensive: reset any stale UI state (e.g. recorder error left status bar stuck)
+        statusBar.updateState('idle');
+        vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+        vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', false);
       }
     }),
   );
