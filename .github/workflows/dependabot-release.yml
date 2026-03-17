@@ -28,36 +28,37 @@ jobs:
           cache: 'npm'
 
       - run: npm ci
-
-      - name: Bump patch version
-        id: version
-        run: |
-          NEW_VERSION=$(npm version patch --no-git-tag-version)
-          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-
       - run: npm run build
       - run: npm test
 
-      - name: Package VSIX
-        run: npx @vscode/vsce package --no-dependencies
-
-      - name: Publish to VS Code Marketplace
-        run: npx @vscode/vsce publish --no-dependencies
+      - name: Bump version, publish, and release
+        id: release
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      - name: Commit version bump and tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Pull latest main (another release may have bumped version)
+          git pull origin main
+
+          # Bump patch version from latest state
+          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+          # Package and publish with new version
+          npx @vscode/vsce package --no-dependencies
+          npx @vscode/vsce publish --no-dependencies
+
+          # Commit, tag, push
           git add package.json package-lock.json
-          git commit -m "chore: release ${{ steps.version.outputs.version }}"
-          git tag "${{ steps.version.outputs.version }}"
+          git commit -m "chore: release $NEW_VERSION"
+          git tag "$NEW_VERSION"
           git push origin main --tags
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.version }}
+          tag_name: ${{ steps.release.outputs.version }}
           files: '*.vsix'
           generate_release_notes: true
