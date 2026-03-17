@@ -340,6 +340,7 @@ async function handleStopAndTranscribe(): Promise<void> {
     }
 
     // Step 4: AI-powered cleanup (optional)
+    const detectedLang = result.language || settings.language || undefined;
     if (settings.aiTextCleanup) {
       const cleanupKey = await storageService.getApiKey('openai-cleanup')
         || await storageService.getApiKey('openai');
@@ -347,7 +348,7 @@ async function handleStopAndTranscribe(): Promise<void> {
         diagLog('Extension', 'Starting AI cleanup with model=' + settings.cleanupModel);
         statusBar.updateState('cleaning');
         try {
-          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages);
+          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages, detectedLang);
           diagLog('Extension', 'AI cleanup complete');
         } catch (error) {
           console.warn('Code Dictator: AI cleanup failed, using raw text', error);
@@ -472,13 +473,14 @@ async function handleTranscribeFile(): Promise<void> {
       text = applyCodeAware(text);
     }
 
+    const detectedLang = result.language || settings.language || undefined;
     if (settings.aiTextCleanup) {
       const cleanupKey = await storageService.getApiKey('openai-cleanup')
         || await storageService.getApiKey('openai');
       if (cleanupKey) {
         statusBar.updateState('cleaning');
         try {
-          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages);
+          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages, detectedLang);
         } catch {
           // Fall through with raw text
         }

@@ -2,30 +2,44 @@ import { LANGUAGES } from '../types';
 
 const OPENAI_CHAT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-4.1-nano';
-const BASE_SYSTEM_PROMPT = `You are a speech-to-text post-processor for developer dictation. Clean up the transcribed text:
 
-1. Remove spurious commas that speech-to-text engines insert at speech pauses. Example: "Check out the, project, folder" → "Check out the project folder". Keep only grammatically correct commas (lists, clauses, "Also, …").
-2. Remove any remaining filler words (um, uh, like, you know, basically, sort of).
-3. Fix punctuation and capitalization.
-4. Do NOT rephrase, summarize, or add words — preserve the speaker's exact meaning and vocabulary.
-5. KEEP the text in the SAME language as the input. Never translate to another language.
-
-Output ONLY the cleaned text, nothing else.`;
-
-function buildSystemPrompt(preferredLanguages?: string[]): string {
-  if (!preferredLanguages || preferredLanguages.length === 0) {
-    return BASE_SYSTEM_PROMPT;
-  }
-
-  // Always include English
-  const langCodes = new Set(preferredLanguages);
-  langCodes.add('en');
+function buildSystemPrompt(detectedLanguage?: string, preferredLanguages?: string[]): string {
+  // Resolve language names for the constraint
+  const langCodes = new Set(preferredLanguages ?? []);
+  langCodes.add('en'); // Always include English
+  if (detectedLanguage) langCodes.add(detectedLanguage);
 
   const langNames = [...langCodes]
     .map(code => LANGUAGES.find(l => l.code === code)?.name)
     .filter(Boolean);
 
-  return BASE_SYSTEM_PROMPT + `\n6. The output text MUST be in one of these languages: ${langNames.join(', ')}. Do not produce text in any other language. Code snippets and technical terms are exempt from this rule.`;
+  const detectedName = detectedLanguage
+    ? LANGUAGES.find(l => l.code === detectedLanguage)?.name
+    : undefined;
+
+  // Language constraint goes FIRST — nano models respect top-of-prompt rules better.
+  const langConstraint = langNames.length > 0
+    ? `CRITICAL RULE: The output text MUST be in one of these languages ONLY: ${langNames.join(', ')}. NEVER output text in any other language (no Kazakh, no Belarusian, no other languages). Code snippets and technical terms in English are exempt.`
+    : '';
+
+  const detectedHint = detectedName
+    ? `The input language was detected as ${detectedName}. Output MUST be in ${detectedName}.`
+    : '';
+
+  return [
+    langConstraint,
+    detectedHint,
+    '',
+    `You are a speech-to-text post-processor for developer dictation. Clean up the transcribed text:`,
+    ``,
+    `1. Remove spurious commas that speech-to-text engines insert at speech pauses. Example: "Check out the, project, folder" → "Check out the project folder". Keep only grammatically correct commas (lists, clauses, "Also, …").`,
+    `2. Remove any remaining filler words (um, uh, like, you know, basically, sort of).`,
+    `3. Fix punctuation and capitalization.`,
+    `4. Do NOT rephrase, summarize, or add words — preserve the speaker's exact meaning and vocabulary.`,
+    `5. KEEP the text in the SAME language as the input. Never translate to another language.`,
+    ``,
+    `Output ONLY the cleaned text, nothing else.`,
+  ].filter(Boolean).join('\n');
 }
 
 /**
@@ -38,6 +52,7 @@ export async function cleanup(
   apiKey: string,
   model?: string,
   preferredLanguages?: string[],
+  detectedLanguage?: string,
 ): Promise<string> {
   if (!text.trim()) {
     return text;
@@ -59,7 +74,7 @@ export async function cleanup(
       body: JSON.stringify({
         model: requestModel,
         messages: [
-          { role: 'system', content: buildSystemPrompt(preferredLanguages) },
+          { role: 'system', content: buildSystemPrompt(detectedLanguage, preferredLanguages) },
           { role: 'user', content: text },
         ],
         temperature: 0.1,

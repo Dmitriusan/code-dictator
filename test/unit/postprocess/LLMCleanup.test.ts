@@ -178,4 +178,75 @@ describe('LLMCleanup.cleanup()', () => {
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.max_tokens).toBe(256); // Math.max(2*2, 256) = 256
   });
+
+  it('includes detected language in system prompt', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'cleaned' } }],
+      }),
+    });
+    globalThis.fetch = mockFetch;
+
+    await cleanup('test', 'sk-test-key', undefined, ['en', 'uk'], 'en');
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const systemPrompt = body.messages[0].content;
+    expect(systemPrompt).toContain('English');
+    expect(systemPrompt).toContain('Ukrainian');
+    expect(systemPrompt).toContain('detected as English');
+  });
+
+  it('includes language constraint at the top of the prompt', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'cleaned' } }],
+      }),
+    });
+    globalThis.fetch = mockFetch;
+
+    await cleanup('test', 'sk-test-key', undefined, ['en', 'uk'], 'uk');
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const systemPrompt: string = body.messages[0].content;
+    const criticalIndex = systemPrompt.indexOf('CRITICAL RULE');
+    const processorIndex = systemPrompt.indexOf('speech-to-text post-processor');
+    expect(criticalIndex).toBeLessThan(processorIndex);
+  });
+
+  it('adds English even when not in preferred languages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'cleaned' } }],
+      }),
+    });
+    globalThis.fetch = mockFetch;
+
+    await cleanup('test', 'sk-test-key', undefined, ['uk'], 'uk');
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const systemPrompt = body.messages[0].content;
+    expect(systemPrompt).toContain('English');
+    expect(systemPrompt).toContain('Ukrainian');
+  });
+
+  it('works without detected language or preferred languages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'cleaned' } }],
+      }),
+    });
+    globalThis.fetch = mockFetch;
+
+    await cleanup('test', 'sk-test-key');
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const systemPrompt = body.messages[0].content;
+    // Should still have English as the default
+    expect(systemPrompt).toContain('English');
+    expect(systemPrompt).toContain('CRITICAL RULE');
+  });
 });
