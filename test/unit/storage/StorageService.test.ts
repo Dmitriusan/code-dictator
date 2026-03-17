@@ -13,20 +13,22 @@ vi.mock('vscode', () => {
       workspace: {
         getConfiguration: vi.fn(() => createMockConfiguration({
           provider: 'elevenlabs',
+          voiceModel: 'auto',
           customApiUrl: '',
-          recordingMode: 'toggle',
-          audioIsolation: 'basic',
+          'recording.mode': 'toggle',
+          'recording.audioIsolation': 'basic',
           language: '',
           preferredLanguages: [],
-          aiTextCleanup: false,
-          cleanupModel: 'gpt-4.1-nano',
-          codeAwareMode: true,
-          defaultTarget: 'clipboard',
-          autoCopyToClipboard: true,
-          successfulTranscriptionSound: false,
-          showCostIndicator: true,
-          maxRecordingDuration: 300,
-          silenceTimeout: 0,
+          'textProcessing.fillerRemoval': true,
+          'textProcessing.aiCleanup': false,
+          'textProcessing.aiModel': 'gpt-4.1-nano',
+          'textProcessing.codeAware': true,
+          'output.target': 'clipboard',
+          'output.autoCopy': true,
+          'feedback.transcriptionSound': false,
+          'feedback.showCost': true,
+          'recording.maxDuration': 300,
+          'recording.silenceTimeout': 0,
           diagnosticLogging: false,
         })),
       },
@@ -34,20 +36,22 @@ vi.mock('vscode', () => {
     workspace: {
       getConfiguration: vi.fn(() => createMockConfiguration({
         provider: 'elevenlabs',
+        voiceModel: 'auto',
         customApiUrl: '',
-        recordingMode: 'toggle',
-        audioIsolation: 'basic',
+        'recording.mode': 'toggle',
+        'recording.audioIsolation': 'basic',
         language: '',
         preferredLanguages: [],
-        aiTextCleanup: false,
-        cleanupModel: 'gpt-4.1-nano',
-        codeAwareMode: true,
-        defaultTarget: 'clipboard',
-        autoCopyToClipboard: true,
-        successfulTranscriptionSound: false,
-        showCostIndicator: true,
-        maxRecordingDuration: 300,
-        silenceTimeout: 0,
+        'textProcessing.fillerRemoval': true,
+          'textProcessing.aiCleanup': false,
+        'textProcessing.aiModel': 'gpt-4.1-nano',
+        'textProcessing.codeAware': true,
+        'output.target': 'clipboard',
+        'output.autoCopy': true,
+        'feedback.transcriptionSound': false,
+        'feedback.showCost': true,
+        'recording.maxDuration': 300,
+        'recording.silenceTimeout': 0,
         diagnosticLogging: false,
       })),
     },
@@ -95,10 +99,12 @@ describe('StorageService', () => {
     it('returns default settings from configuration', () => {
       const settings = storage.getSettings();
       expect(settings.provider).toBe('elevenlabs');
+      expect(settings.voiceModel).toBe('auto');
       expect(settings.recordingMode).toBe('toggle');
       expect(settings.audioIsolation).toBe('basic');
       expect(settings.language).toBe('');
       expect(settings.preferredLanguages).toEqual([]);
+      expect(settings.fillerRemoval).toBe(true);
       expect(settings.aiTextCleanup).toBe(false);
       expect(settings.codeAwareMode).toBe(true);
       expect(settings.defaultTarget).toBe('clipboard');

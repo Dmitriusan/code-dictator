@@ -3,11 +3,20 @@ import type { STTProvider, TranscribeOptions, TranscriptionResult } from '../typ
 const ENDPOINT = 'https://api.elevenlabs.io/v1/speech-to-text';
 const COST_PER_SECOND = 0.000111; // $0.40/hour
 
-export class ElevenLabsProvider implements STTProvider {
-  readonly name = 'ElevenLabs Scribe v2';
-  readonly id = 'elevenlabs';
+const DEFAULT_MODEL = 'scribe_v2';
 
-  constructor(private readonly getApiKey: () => Promise<string | undefined>) {}
+export class ElevenLabsProvider implements STTProvider {
+  readonly name: string;
+  readonly id = 'elevenlabs';
+  private readonly model: string;
+
+  constructor(
+    private readonly getApiKey: () => Promise<string | undefined>,
+    model?: string,
+  ) {
+    this.model = model || DEFAULT_MODEL;
+    this.name = `ElevenLabs ${this.model}`;
+  }
 
   async transcribe(audio: Buffer, options: TranscribeOptions): Promise<TranscriptionResult> {
     const apiKey = await this.getApiKey();
@@ -35,7 +44,7 @@ export class ElevenLabsProvider implements STTProvider {
     parts.push(Buffer.from(
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="model_id"\r\n\r\n` +
-      `scribe_v2\r\n`
+      `${this.model}\r\n`
     ));
 
     // language_code field (optional)

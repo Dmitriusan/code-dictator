@@ -40,6 +40,14 @@ export class StatusBar implements vscode.Disposable {
   }
 
   updateState(state: StatusBarState): void {
+    // Cancel any pending transient message timer — a state change takes
+    // priority. Without this, a leftover timer from showTransientMessage()
+    // can fire mid-recording and reset the status bar to idle.
+    if (this.transientTimer) {
+      clearTimeout(this.transientTimer);
+      this.transientTimer = undefined;
+    }
+
     switch (state) {
       case 'idle':
         this.stopRecordingTimer();
@@ -113,8 +121,8 @@ export class StatusBar implements vscode.Disposable {
     const config = vscode.workspace.getConfiguration('codeDictator');
 
     if (success) {
-      durationMs = (config.get<number>('successFlashDuration') ?? 5) * 1000;
-      const useBackground = config.get<boolean>('successFlashBackground') ?? false;
+      durationMs = (config.get<number>('feedback.flashDuration') ?? 5) * 1000;
+      const useBackground = config.get<boolean>('feedback.flashBackground') ?? false;
       if (useBackground) {
         this.micButton.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         this.micButton.color = undefined;

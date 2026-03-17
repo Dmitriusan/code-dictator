@@ -5,7 +5,7 @@ import { getRecorderWebviewContent } from './RecorderWebviewContent';
 import { NativeRecorder } from './NativeRecorder';
 import { diagLog } from '../DiagnosticLog';
 
-type RecorderEvent = 'recordingStarted' | 'recordingStopped' | 'audioData' | 'error' | 'silenceDetected';
+type RecorderEvent = 'recordingStarted' | 'recordingStopped' | 'audioData' | 'error' | 'silenceDetected' | 'trackEnded';
 
 interface AudioDataPayload {
   buffer: Buffer;
@@ -23,6 +23,12 @@ export class RecorderManager implements vscode.Disposable {
   private readyResolve: (() => void) | undefined;
   private disposables: vscode.Disposable[] = [];
   private nativeRecorder: NativeRecorder | null = null;
+  // Audio data that arrived before stopRecording() was called (e.g. Bluetooth
+  // device disconnected → track.onended → MediaRecorder auto-stopped).
+  private pendingAudioPayload: AudioDataPayload | undefined;
+  // Max duration timeout — must be cleared when recording stops to prevent
+  // a stale timer from killing the next recording session.
+  private maxDurationTimeout: ReturnType<typeof setTimeout> | undefined;
   // Set during the webview permission-detection window to intercept errors
   // before they propagate to external onError handlers.
   private permissionErrorHandler: ((msg: string) => void) | undefined;
@@ -51,6 +57,10 @@ export class RecorderManager implements vscode.Disposable {
 
   onSilenceDetected(handler: () => void): vscode.Disposable {
     return this.addListener('silenceDetected', handler);
+  }
+
+  onTrackEnded(handler: () => void): vscode.Disposable {
+    return this.addListener('trackEnded', handler);
   }
 
   async startRecording(
@@ -135,13 +145,19 @@ export class RecorderManager implements vscode.Disposable {
       });
     }
 
+    // Warn early if mic isn't producing any audio data
+    this.nativeRecorder.setNoAudioDataHandler(() => {
+      this.emit('trackEnded');
+    });
+
     await this.nativeRecorder.start(silenceTimeout);
     this._isRecording = true;
     diagLog('RecorderManager', `Started native recording, silenceTimeout=${silenceTimeout}s`);
 
     // Max duration enforcement
     if (maxDuration > 0) {
-      setTimeout(() => {
+      this.maxDurationTimeout = setTimeout(() => {
+        this.maxDurationTimeout = undefined;
         if (this._isRecording && this.nativeRecorder?.isRecording) {
           diagLog('RecorderManager', 'Max duration reached, auto-stopping');
           this.emit('silenceDetected'); // Reuse silence signal to auto-stop
@@ -150,7 +166,26 @@ export class RecorderManager implements vscode.Disposable {
     }
   }
 
+  private clearMaxDurationTimeout(): void {
+    if (this.maxDurationTimeout) {
+      clearTimeout(this.maxDurationTimeout);
+      this.maxDurationTimeout = undefined;
+    }
+  }
+
   async stopRecording(): Promise<AudioDataPayload> {
+    this.clearMaxDurationTimeout();
+
+    // If audio data already arrived (e.g. track ended due to Bluetooth
+    // disconnect), return it immediately instead of asking the webview.
+    if (this.pendingAudioPayload) {
+      const payload = this.pendingAudioPayload;
+      this.pendingAudioPayload = undefined;
+      this._isRecording = false;
+      diagLog('RecorderManager', 'Returning pending audio payload from unsolicited stop');
+      return payload;
+    }
+
     // Native recording path
     if (this.nativeRecorder?.isRecording) {
       this._isRecording = false;
@@ -200,6 +235,8 @@ export class RecorderManager implements vscode.Disposable {
   }
 
   cancelRecording(): void {
+    this.clearMaxDurationTimeout();
+
     // Native recording path
     if (this.nativeRecorder?.isRecording) {
       this.nativeRecorder.cancel();
@@ -374,7 +411,6 @@ export class RecorderManager implements vscode.Disposable {
         break;
       }
       case 'audioData': {
-        this._isRecording = false;
         const buffer = Buffer.from(message.data, 'base64');
         const payload: AudioDataPayload = {
           buffer,
@@ -383,9 +419,20 @@ export class RecorderManager implements vscode.Disposable {
         };
         this.emit('audioData', payload);
         if (this.audioDataResolve) {
+          // Normal path: stopRecording() is waiting for this data.
+          this._isRecording = false;
           this.audioDataResolve(payload);
           this.audioDataResolve = undefined;
           this.audioDataReject = undefined;
+        } else {
+          // Unsolicited audio data — e.g. Bluetooth device disconnected,
+          // track ended, MediaRecorder auto-stopped. Store the payload and
+          // signal the extension to trigger handleStopAndTranscribe().
+          // Keep _isRecording = true so the silenceDetected guard passes.
+          diagLog('RecorderManager', 'Unsolicited audioData received (track ended?), storing and signaling stop');
+          this.pendingAudioPayload = payload;
+          this.emit('trackEnded');
+          this.emit('silenceDetected');
         }
         break;
       }
@@ -407,6 +454,12 @@ export class RecorderManager implements vscode.Disposable {
       }
       case 'silenceDetected': {
         this.emit('silenceDetected');
+        break;
+      }
+      case 'trackMuted': {
+        // Mic track was muted (common with Bluetooth switching). The recording
+        // continues but captures silence. Notify the user immediately.
+        this.emit('trackEnded');
         break;
       }
       case 'diagnosticLog': {

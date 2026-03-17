@@ -30,11 +30,13 @@ export type ProviderType = 'elevenlabs' | 'openai' | 'custom';
 // Settings
 export interface CodeDictatorSettings {
   provider: ProviderType;
+  voiceModel: string;
   customApiUrl: string;
   recordingMode: RecordingMode;
   audioIsolation: AudioIsolation;
   language: string;
   preferredLanguages: string[];
+  fillerRemoval: boolean;
   aiTextCleanup: boolean;
   cleanupModel: string;
   codeAwareMode: boolean;
@@ -80,6 +82,7 @@ export type MessageFromWebview =
   | { type: 'recordingStopped' }
   | { type: 'recordingError'; message: string }
   | { type: 'silenceDetected' }
+  | { type: 'trackMuted' }
   | { type: 'diagnosticLog'; message: string };
 
 export type MessageToWebview =

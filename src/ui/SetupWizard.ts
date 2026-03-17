@@ -42,12 +42,12 @@ export async function runSetupWizard(storage: StorageService): Promise<boolean> 
 
   // Update provider setting
   const config = vscode.workspace.getConfiguration('codeDictator');
-  await config.update('speechToTextProvider', providerId, vscode.ConfigurationTarget.Global);
+  await config.update('provider', providerId, vscode.ConfigurationTarget.Global);
 
   // Step 2: Get API key (provider-specific flow)
   if (providerId === 'elevenlabs') {
     const action = await vscode.window.showInformationMessage(
-      'You need an ElevenLabs API key. The free plan includes transcription credits.',
+      'You need an ElevenLabs API key. Sign up (free), find "Developers" at the bottom of the left panel, then create a key under API Keys.',
       { modal: false },
       'Get API Key (opens browser)',
       'I already have one'
@@ -56,7 +56,7 @@ export async function runSetupWizard(storage: StorageService): Promise<boolean> 
       await vscode.env.openExternal(vscode.Uri.parse(ELEVENLABS_REFERRAL));
       // Give user time to get the key
       await vscode.window.showInformationMessage(
-        'After copying your API key from ElevenLabs, come back here and click "Enter Key".',
+        'Sign up or log in → "Developers" (bottom of the left panel) → "API Keys" → "Create API Key" → copy it and click "Enter Key" below.',
         'Enter Key'
       );
     }

@@ -11,11 +11,13 @@ import type { CodeDictatorSettings } from '../../../src/types';
 function makeSettings(overrides: Partial<CodeDictatorSettings> = {}): CodeDictatorSettings {
   return {
     provider: 'elevenlabs',
+    voiceModel: 'auto',
     customApiUrl: '',
     recordingMode: 'toggle',
     audioIsolation: 'basic',
     language: '',
     preferredLanguages: [],
+    fillerRemoval: true,
     aiTextCleanup: false,
     cleanupModel: 'gpt-4.1-nano',
     codeAwareMode: true,

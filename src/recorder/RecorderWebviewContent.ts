@@ -238,17 +238,36 @@ export function getRecorderWebviewContent(nonce: string): string {
           });
         };
 
-        // Monitor audio tracks — if the system revokes mic access or the
-        // audio device disconnects, the track ends and MediaRecorder stops
-        // silently. Detect this so we can report it instead of losing audio.
-        for (const track of recorderStream.getTracks()) {
+        // Monitor audio tracks — detect device disconnects and Bluetooth
+        // switching. We monitor BOTH the original mic stream (which fires
+        // onended/onmute on real device events) and the recorder stream
+        // (which may be a synthetic Web Audio destination stream).
+        function monitorTrack(track, label) {
           track.onended = () => {
-            vscode.postMessage({ type: 'diagnosticLog', message: 'Audio track ended unexpectedly (track.onended fired). readyState=' + track.readyState });
+            vscode.postMessage({ type: 'diagnosticLog', message: label + ' track ended. readyState=' + track.readyState + ', muted=' + track.muted });
             if (mediaRecorder && mediaRecorder.state === 'recording') {
-              vscode.postMessage({ type: 'diagnosticLog', message: 'Stopping MediaRecorder due to track end' });
+              vscode.postMessage({ type: 'diagnosticLog', message: 'Stopping MediaRecorder due to ' + label + ' track end' });
               mediaRecorder.stop();
             }
           };
+          track.onmute = () => {
+            vscode.postMessage({ type: 'diagnosticLog', message: label + ' track muted (Bluetooth switch?). readyState=' + track.readyState });
+            vscode.postMessage({ type: 'trackMuted' });
+          };
+          track.onunmute = () => {
+            vscode.postMessage({ type: 'diagnosticLog', message: label + ' track unmuted. readyState=' + track.readyState });
+          };
+        }
+
+        // Monitor the original mic tracks (fire on real device events)
+        for (const track of stream.getTracks()) {
+          monitorTrack(track, 'Mic');
+        }
+        // If recorderStream differs (audio processing), monitor those too
+        if (recorderStream !== stream) {
+          for (const track of recorderStream.getTracks()) {
+            monitorTrack(track, 'Recorder');
+          }
         }
 
         mediaRecorder.start(250); // Collect data every 250ms
@@ -260,6 +279,7 @@ export function getRecorderWebviewContent(nonce: string): string {
           const bufferLength = analyser.frequencyBinCount;
           const dataArray = new Uint8Array(bufferLength);
           const silenceThreshold = 10; // Amplitude threshold (0-255 range)
+          let silenceCheckCount = 0;
 
           silenceCheckInterval = setInterval(() => {
             analyser.getByteFrequencyData(dataArray);
@@ -268,6 +288,15 @@ export function getRecorderWebviewContent(nonce: string): string {
               sum += dataArray[i];
             }
             const average = sum / bufferLength;
+            silenceCheckCount++;
+
+            // Log audio levels every 5 seconds for diagnostics
+            if (silenceCheckCount % 25 === 0) {
+              const elapsed = Math.round((Date.now() - recordingStart) / 1000);
+              const micTrack = stream.getAudioTracks()[0];
+              const trackInfo = micTrack ? ('muted=' + micTrack.muted + ' readyState=' + micTrack.readyState) : 'no-track';
+              vscode.postMessage({ type: 'diagnosticLog', message: 'Audio level: avg=' + average.toFixed(1) + ', silentFor=' + (silenceStart ? Math.round((Date.now() - silenceStart) / 1000) + 's' : 'no') + ', elapsed=' + elapsed + 's, track: ' + trackInfo });
+            }
 
             if (average < silenceThreshold) {
               if (silenceStart === null) {

@@ -113,123 +113,68 @@
         "when": "codeDictator.isRecording"
       }
     ],
-    "configuration": {
-      "title": "Code Dictator",
-      "properties": {
-        "codeDictator.speechToTextProvider": {
-          "order": 1,
-          "type": "string",
-          "default": "elevenlabs",
-          "enum": [
-            "elevenlabs",
-            "openai",
-            "custom"
-          ],
-          "enumDescriptions": [
-            "ElevenLabs Scribe v2 — High accuracy, 90+ languages (recommended)",
-            "OpenAI Whisper — Great alternative if you already have an API key",
-            "Custom Whisper-compatible API endpoint"
-          ],
-          "description": "Speech-to-text provider for voice transcription. After changing, you will be prompted for an API key on first recording."
-        },
-        "codeDictator.customApiUrl": {
-          "order": 17,
-          "type": "string",
-          "default": "",
-          "description": "Custom Whisper-compatible API endpoint URL (e.g., http://localhost:8000/v1/audio/transcriptions)"
-        },
-        "codeDictator.language": {
-          "order": 4,
-          "type": "string",
-          "default": "",
-          "enum": [
-            "",
-            "en",
-            "es",
-            "fr",
-            "de",
-            "pt",
-            "zh",
-            "ja",
-            "ko",
-            "ru",
-            "uk",
-            "pl",
-            "hi",
-            "ar",
-            "tr",
-            "it",
-            "nl",
-            "sv",
-            "da",
-            "fi",
-            "no",
-            "cs",
-            "ro",
-            "hu",
-            "el",
-            "he",
-            "th",
-            "vi",
-            "id",
-            "ms",
-            "bg",
-            "hr",
-            "sk",
-            "sl",
-            "sr",
-            "ca",
-            "ta",
-            "bn"
-          ],
-          "enumItemLabels": [
-            "Auto-detect",
-            "English",
-            "Spanish",
-            "French",
-            "German",
-            "Portuguese",
-            "Chinese",
-            "Japanese",
-            "Korean",
-            "Russian",
-            "Ukrainian",
-            "Polish",
-            "Hindi",
-            "Arabic",
-            "Turkish",
-            "Italian",
-            "Dutch",
-            "Swedish",
-            "Danish",
-            "Finnish",
-            "Norwegian",
-            "Czech",
-            "Romanian",
-            "Hungarian",
-            "Greek",
-            "Hebrew",
-            "Thai",
-            "Vietnamese",
-            "Indonesian",
-            "Malay",
-            "Bulgarian",
-            "Croatian",
-            "Slovak",
-            "Slovenian",
-            "Serbian",
-            "Catalan",
-            "Tamil",
-            "Bengali"
-          ],
-          "description": "Transcription language. Leave as Auto-detect for automatic language detection."
-        },
-        "codeDictator.preferredLanguages": {
-          "order": 5,
-          "type": "array",
-          "items": {
+    "configuration": [
+      {
+        "title": "Code Dictator: Speech Recognition",
+        "properties": {
+          "codeDictator.provider": {
+            "order": 1,
             "type": "string",
+            "default": "elevenlabs",
             "enum": [
+              "elevenlabs",
+              "openai",
+              "custom"
+            ],
+            "enumDescriptions": [
+              "ElevenLabs — High accuracy, 90+ languages (recommended)",
+              "OpenAI — Great alternative if you already have an API key",
+              "Custom Whisper-compatible API endpoint"
+            ],
+            "description": "Speech-to-text provider for voice transcription. After changing, you will be prompted for an API key on first recording."
+          },
+          "codeDictator.voiceModel": {
+            "order": 2,
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "auto",
+              "scribe_v2",
+              "scribe_v1",
+              "whisper-1",
+              "gpt-4o-transcribe",
+              "gpt-4o-mini-transcribe"
+            ],
+            "enumItemLabels": [
+              "Auto (recommended)",
+              "Scribe v2 (ElevenLabs)",
+              "Scribe v1 (ElevenLabs)",
+              "Whisper (OpenAI)",
+              "GPT-4o Transcribe (OpenAI)",
+              "GPT-4o Mini Transcribe (OpenAI)"
+            ],
+            "enumDescriptions": [
+              "Automatically uses the best model for your selected provider",
+              "ElevenLabs' latest model — best accuracy, 90+ languages",
+              "ElevenLabs' previous generation model",
+              "OpenAI's original Whisper model — good accuracy, 57 languages",
+              "OpenAI's newest transcription model — higher accuracy, powered by GPT-4o",
+              "OpenAI's efficient transcription model — good balance of speed and cost"
+            ],
+            "description": "Speech-to-text model. \"Auto\" selects the best model for your provider."
+          },
+          "codeDictator.customApiUrl": {
+            "order": 3,
+            "type": "string",
+            "default": "",
+            "description": "Custom speech-to-text API endpoint URL. Only used when Provider is set to \"Custom\" (e.g., http://localhost:8000/v1/audio/transcriptions)"
+          },
+          "codeDictator.language": {
+            "order": 4,
+            "type": "string",
+            "default": "",
+            "enum": [
+              "",
               "en",
               "es",
               "fr",
@@ -269,6 +214,7 @@
               "bn"
             ],
             "enumItemLabels": [
+              "Auto-detect",
               "English",
               "Spanish",
               "French",
@@ -306,135 +252,262 @@
               "Catalan",
               "Tamil",
               "Bengali"
-            ]
+            ],
+            "description": "Transcription language. Leave as Auto-detect for automatic language detection."
           },
-          "default": [],
-          "description": "Your preferred languages for quick switching. Only these appear in the language picker. Use \"Code Dictator: Configure Languages\" command for a visual picker.",
-          "uniqueItems": true
-        },
-        "codeDictator.recordingMode": {
-          "order": 6,
-          "type": "string",
-          "default": "toggle",
-          "enum": [
-            "toggle",
-            "hold"
-          ],
-          "enumDescriptions": [
-            "Press Alt+D once to start recording, press Alt+D again to stop and transcribe",
-            "Hold Alt+D to record — release the key to stop and transcribe automatically"
-          ],
-          "description": "Recording activation mode"
-        },
-        "codeDictator.defaultTarget": {
-          "order": 7,
-          "type": "string",
-          "default": "clipboard",
-          "enum": [
-            "clipboard",
-            "editor"
-          ],
-          "enumDescriptions": [
-            "Copy transcription to clipboard — paste wherever you need it",
-            "Insert at cursor in active text editor (may not work with AI chat panels)"
-          ],
-          "description": "Where to send transcribed text"
-        },
-        "codeDictator.autoCopyToClipboard": {
-          "order": 8,
-          "type": "boolean",
-          "default": true,
-          "description": "Also copy transcription to clipboard (in addition to primary target)"
-        },
-        "codeDictator.audioIsolation": {
-          "order": 9,
-          "type": "string",
-          "default": "basic",
-          "enum": [
-            "off",
-            "basic",
-            "aggressive"
-          ],
-          "enumDescriptions": [
-            "No noise reduction — raw audio",
-            "Browser-native noise suppression and echo cancellation",
-            "Additional filtering (high-pass, low-pass, compressor)"
-          ],
-          "description": "Audio noise reduction level"
-        },
-        "codeDictator.codeAwareMode": {
-          "order": 10,
-          "type": "boolean",
-          "default": true,
-          "description": "Convert spoken code terms to symbols (e.g., 'open paren' → '(')"
-        },
-        "codeDictator.aiTextCleanup": {
-          "order": 2,
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "**Highly recommended** — significantly improves transcription quality. After speech-to-text, sends the transcript through an OpenAI LLM to clean it up (rephrase, fix grammar, remove context-sensitive fillers). This is separate from the speech-to-text provider above. **Requires an OpenAI API key** — [Set OpenAI API Key](command:codeDictator.setCleanupApiKey).\n\n*Note: Basic filler removal (uh, um, äh, ну, etc.) is always active — language-aware and free, no API needed.*"
-        },
-        "codeDictator.cleanupModel": {
-          "order": 3,
-          "type": "string",
-          "default": "gpt-4.1-nano",
-          "enum": [
-            "gpt-4.1-nano",
-            "gpt-4.1-mini",
-            "gpt-4.1"
-          ],
-          "markdownDescription": "OpenAI LLM model used for post-transcription text cleanup (not speech-to-text). Smaller models are cheaper and faster; larger models produce better results."
-        },
-        "codeDictator.maxRecordingDuration": {
-          "order": 12,
-          "type": "number",
-          "default": 300,
-          "minimum": 10,
-          "maximum": 3600,
-          "description": "Maximum recording duration in seconds"
-        },
-        "codeDictator.silenceTimeout": {
-          "order": 11,
-          "type": "number",
-          "default": 0,
-          "minimum": 0,
-          "maximum": 60,
-          "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Silence detection requires the webview-based recorder. On Linux systems using arecord as the native recorder, this setting has no effect — use `maxRecordingDuration` instead.*\n\n*Silence detection may not work reliably in noisy environments or with background music — consider using `maxRecordingDuration` as a fallback in those situations.*"
-        },
-        "codeDictator.showCostIndicator": {
-          "order": 13,
-          "type": "boolean",
-          "default": true,
-          "description": "Show estimated cost in status bar"
-        },
-        "codeDictator.successFlashDuration": {
-          "order": 14,
-          "type": "number",
-          "default": 5,
-          "minimum": 1,
-          "maximum": 30,
-          "description": "How many seconds the success indicator stays visible after transcription completes"
-        },
-        "codeDictator.successFlashBackground": {
-          "order": 15,
-          "type": "boolean",
-          "default": false,
-          "description": "Use a solid background for the success indicator instead of colored text (exact color depends on your theme)"
-        },
-        "codeDictator.successfulTranscriptionSound": {
-          "order": 16,
-          "type": "boolean",
-          "default": false,
-          "description": "Play a short chime when transcription completes successfully"
-        },
-        "codeDictator.diagnosticLogging": {
-          "order": 18,
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Log recording diagnostics to the **Code Dictator** output channel. Enable this if recordings stop unexpectedly or you need to troubleshoot microphone issues."
+          "codeDictator.preferredLanguages": {
+            "order": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "en",
+                "es",
+                "fr",
+                "de",
+                "pt",
+                "zh",
+                "ja",
+                "ko",
+                "ru",
+                "uk",
+                "pl",
+                "hi",
+                "ar",
+                "tr",
+                "it",
+                "nl",
+                "sv",
+                "da",
+                "fi",
+                "no",
+                "cs",
+                "ro",
+                "hu",
+                "el",
+                "he",
+                "th",
+                "vi",
+                "id",
+                "ms",
+                "bg",
+                "hr",
+                "sk",
+                "sl",
+                "sr",
+                "ca",
+                "ta",
+                "bn"
+              ],
+              "enumItemLabels": [
+                "English",
+                "Spanish",
+                "French",
+                "German",
+                "Portuguese",
+                "Chinese",
+                "Japanese",
+                "Korean",
+                "Russian",
+                "Ukrainian",
+                "Polish",
+                "Hindi",
+                "Arabic",
+                "Turkish",
+                "Italian",
+                "Dutch",
+                "Swedish",
+                "Danish",
+                "Finnish",
+                "Norwegian",
+                "Czech",
+                "Romanian",
+                "Hungarian",
+                "Greek",
+                "Hebrew",
+                "Thai",
+                "Vietnamese",
+                "Indonesian",
+                "Malay",
+                "Bulgarian",
+                "Croatian",
+                "Slovak",
+                "Slovenian",
+                "Serbian",
+                "Catalan",
+                "Tamil",
+                "Bengali"
+              ]
+            },
+            "default": [],
+            "description": "Your preferred languages for quick switching. Only these appear in the language picker. Use \"Code Dictator: Configure Languages\" command for a visual picker.",
+            "uniqueItems": true
+          }
+        }
+      },
+      {
+        "title": "Code Dictator: Text Processing",
+        "properties": {
+          "codeDictator.textProcessing.fillerRemoval": {
+            "order": 1,
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Remove filler words (uh, um, like, äh, ну, えーと, etc.) from transcriptions. Covers 90+ languages, no API needed. Disable if filler removal interferes with your language or use case."
+          },
+          "codeDictator.textProcessing.codeAware": {
+            "order": 2,
+            "type": "boolean",
+            "default": true,
+            "description": "Convert spoken code terms to symbols (e.g., 'open paren' → '(')"
+          },
+          "codeDictator.textProcessing.aiCleanup": {
+            "order": 3,
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "**Highly recommended** — significantly improves transcription quality. After speech-to-text, sends the transcript through an OpenAI LLM to clean it up (rephrase, fix grammar, remove context-sensitive fillers). **Requires an OpenAI API key** — [Set OpenAI API Key](command:codeDictator.setCleanupApiKey)."
+          },
+          "codeDictator.textProcessing.aiModel": {
+            "order": 4,
+            "type": "string",
+            "default": "gpt-4.1-nano",
+            "enum": [
+              "gpt-4.1-nano",
+              "gpt-4.1-mini",
+              "gpt-4.1"
+            ],
+            "enumItemLabels": [
+              "Fast & Very Cheap",
+              "Balanced",
+              "Best Quality"
+            ],
+            "enumDescriptions": [
+              "gpt-4.1-nano — cheapest and fastest, good for basic cleanup",
+              "gpt-4.1-mini — better grammar and rephrasing, slightly higher cost",
+              "gpt-4.1 — most accurate cleanup, highest cost"
+            ],
+            "markdownDescription": "OpenAI model for AI text cleanup. Smaller models are cheaper and faster; larger models produce better results."
+          }
+        }
+      },
+      {
+        "title": "Code Dictator: Recording",
+        "properties": {
+          "codeDictator.recording.mode": {
+            "order": 1,
+            "type": "string",
+            "default": "toggle",
+            "enum": [
+              "toggle",
+              "hold"
+            ],
+            "enumDescriptions": [
+              "Press Alt+D once to start recording, press Alt+D again to stop and transcribe",
+              "Hold Alt+D to record — release the key to stop and transcribe automatically"
+            ],
+            "description": "Recording activation mode"
+          },
+          "codeDictator.recording.audioIsolation": {
+            "order": 2,
+            "type": "string",
+            "default": "basic",
+            "enum": [
+              "off",
+              "basic",
+              "aggressive"
+            ],
+            "enumDescriptions": [
+              "No noise reduction — raw audio",
+              "Browser-native noise suppression and echo cancellation",
+              "Additional filtering (high-pass, low-pass, compressor)"
+            ],
+            "description": "Audio noise reduction level"
+          },
+          "codeDictator.recording.silenceTimeout": {
+            "order": 3,
+            "type": "number",
+            "default": 0,
+            "minimum": 0,
+            "maximum": 60,
+            "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Silence detection requires the webview-based recorder. On Linux systems using arecord as the native recorder, this setting has no effect — use `recording.maxDuration` instead.*\n\n*Silence detection may not work reliably in noisy environments or with background music — consider using `recording.maxDuration` as a fallback in those situations.*"
+          },
+          "codeDictator.recording.maxDuration": {
+            "order": 4,
+            "type": "number",
+            "default": 300,
+            "minimum": 10,
+            "maximum": 3600,
+            "description": "Maximum recording duration in seconds"
+          }
+        }
+      },
+      {
+        "title": "Code Dictator: Output",
+        "properties": {
+          "codeDictator.output.target": {
+            "order": 1,
+            "type": "string",
+            "default": "clipboard",
+            "enum": [
+              "clipboard",
+              "editor"
+            ],
+            "enumDescriptions": [
+              "Copy transcription to clipboard — paste wherever you need it",
+              "Insert at cursor in active text editor (may not work with AI chat panels)"
+            ],
+            "description": "Where to send transcribed text"
+          },
+          "codeDictator.output.autoCopy": {
+            "order": 2,
+            "type": "boolean",
+            "default": true,
+            "description": "Also copy transcription to clipboard (in addition to primary target)"
+          }
+        }
+      },
+      {
+        "title": "Code Dictator: Feedback",
+        "properties": {
+          "codeDictator.feedback.showCost": {
+            "order": 1,
+            "type": "boolean",
+            "default": true,
+            "description": "Show estimated cost in status bar"
+          },
+          "codeDictator.feedback.flashDuration": {
+            "order": 2,
+            "type": "number",
+            "default": 5,
+            "minimum": 1,
+            "maximum": 30,
+            "description": "How many seconds the success indicator stays visible after transcription completes"
+          },
+          "codeDictator.feedback.flashBackground": {
+            "order": 3,
+            "type": "boolean",
+            "default": false,
+            "description": "Use a solid background for the success indicator instead of colored text (exact color depends on your theme)"
+          },
+          "codeDictator.feedback.transcriptionSound": {
+            "order": 4,
+            "type": "boolean",
+            "default": false,
+            "description": "Play a short chime when transcription completes successfully"
+          }
+        }
+      },
+      {
+        "title": "Code Dictator: Advanced",
+        "properties": {
+          "codeDictator.diagnosticLogging": {
+            "order": 1,
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "Log recording diagnostics to the **Code Dictator** output channel. Enable this if recordings stop unexpectedly or you need to troubleshoot microphone issues."
+          }
         }
       }
-    },
+    ],
     "walkthroughs": [
       {
         "id": "codeDictator.setup",

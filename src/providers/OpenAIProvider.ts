@@ -3,11 +3,20 @@ import type { STTProvider, TranscribeOptions, TranscriptionResult } from '../typ
 const ENDPOINT = 'https://api.openai.com/v1/audio/transcriptions';
 const COST_PER_SECOND = 0.0001; // $0.006/minute
 
-export class OpenAIProvider implements STTProvider {
-  readonly name = 'OpenAI Whisper';
-  readonly id = 'openai';
+const DEFAULT_MODEL = 'whisper-1';
 
-  constructor(private readonly getApiKey: () => Promise<string | undefined>) {}
+export class OpenAIProvider implements STTProvider {
+  readonly name: string;
+  readonly id = 'openai';
+  private readonly model: string;
+
+  constructor(
+    private readonly getApiKey: () => Promise<string | undefined>,
+    model?: string,
+  ) {
+    this.model = model || DEFAULT_MODEL;
+    this.name = `OpenAI ${this.model}`;
+  }
 
   async transcribe(audio: Buffer, options: TranscribeOptions): Promise<TranscriptionResult> {
     const apiKey = await this.getApiKey();
@@ -35,14 +44,17 @@ export class OpenAIProvider implements STTProvider {
     parts.push(Buffer.from(
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="model"\r\n\r\n` +
-      `whisper-1\r\n`
+      `${this.model}\r\n`
     ));
 
-    // response_format: verbose_json returns language detection alongside text
+    // verbose_json returns language + duration alongside text, but newer
+    // models (gpt-4o-transcribe, etc.) only support 'json' or 'text'
+    const supportsVerbose = this.model.startsWith('whisper');
+    const responseFormat = supportsVerbose ? 'verbose_json' : 'json';
     parts.push(Buffer.from(
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="response_format"\r\n\r\n` +
-      `verbose_json\r\n`
+      `${responseFormat}\r\n`
     ));
 
     // language field (optional)

@@ -21,6 +21,7 @@ export class NativeRecorder {
   private startTime = 0;
   private onUnexpectedExit: (() => void) | null = null;
   private onSilenceDetected: (() => void) | null = null;
+  private onNoAudioData: (() => void) | null = null;
   private stderrData = '';
   private stoppingGracefully = false;
   private silenceTimeout = 0;
@@ -34,8 +35,26 @@ export class NativeRecorder {
   static detectTool(): NativeTool | null {
     const platform = process.platform;
 
-    // arecord (Linux ALSA — usually pre-installed)
+    // Linux: prefer PulseAudio/PipeWire tools over raw ALSA.
+    // arecord talks directly to ALSA and cannot see Bluetooth devices,
+    // which are routed through PulseAudio/PipeWire.
     if (platform === 'linux') {
+      // parecord (PulseAudio CLI — works on both PulseAudio and PipeWire
+      // via the PulseAudio compatibility layer. Supports stdout piping
+      // with --raw, which pw-record does not.)
+      try {
+        execSync('which parecord', { stdio: 'ignore' });
+        return { name: 'parecord', command: 'parecord' };
+      } catch { /* not found */ }
+
+      // pw-record (PipeWire native — does NOT support stdout piping,
+      // so silence detection is unavailable with this tool)
+      try {
+        execSync('which pw-record', { stdio: 'ignore' });
+        return { name: 'pw-record', command: 'pw-record' };
+      } catch { /* not found */ }
+
+      // arecord (ALSA fallback — no Bluetooth support)
       try {
         execSync('which arecord', { stdio: 'ignore' });
         return { name: 'arecord', command: 'arecord' };
@@ -91,11 +110,21 @@ export class NativeRecorder {
     this.tempFile = path.join(os.tmpdir(), `code-dictator-${Date.now()}.wav`);
 
     // When silence detection is needed, pipe stdout so we can analyze audio levels.
-    // Otherwise, write directly to file.
-    const useStdoutPipe = silenceTimeout > 0 && tool.name === 'arecord';
+    // pw-record does NOT support stdout piping, so it always writes to file.
+    const useStdoutPipe = silenceTimeout > 0 && (tool.name === 'arecord' || tool.name === 'parecord');
 
     let args: string[];
-    if (tool.name === 'arecord') {
+    if (tool.name === 'pw-record') {
+      // pw-record always writes to file (no stdout pipe support)
+      args = ['--format', 's16', '--rate', '16000', '--channels', '1', this.tempFile];
+    } else if (tool.name === 'parecord') {
+      if (useStdoutPipe) {
+        // Output raw PCM to stdout for real-time analysis
+        args = ['--format=s16le', '--rate=16000', '--channels=1', '--raw'];
+      } else {
+        args = ['--format=s16le', '--rate=16000', '--channels=1', '--file-format=wav', this.tempFile];
+      }
+    } else if (tool.name === 'arecord') {
       if (useStdoutPipe) {
         // Output raw PCM to stdout for real-time analysis
         args = ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'raw', '-'];
@@ -126,13 +155,31 @@ export class NativeRecorder {
           const writeStream = fs.createWriteStream(this.tempFile);
           // Write WAV header (will be finalized on stop)
           writeStream.write(createWavHeader());
+          let totalBytes = 0;
+          let stdoutChunks = 0;
 
           this.process.stdout?.on('data', (chunk: Buffer) => {
+            totalBytes += chunk.length;
+            stdoutChunks++;
             writeStream.write(chunk);
             this.analyzeChunkForSilence(chunk);
+            // Log first chunk and then every ~5 seconds (at 16kHz mono 16-bit ≈ 32KB/s)
+            if (stdoutChunks === 1 || totalBytes % 160000 < chunk.length) {
+              diagLog('NativeRecorder', `stdout data: chunk#${stdoutChunks}, chunkSize=${chunk.length}, totalBytes=${totalBytes}`);
+            }
           });
 
+          // Detect "no data flowing" — if mic is unavailable (e.g. Bluetooth
+          // hijacked by phone), the process runs but stdout produces nothing.
+          setTimeout(() => {
+            if (this._isRecording && totalBytes === 0) {
+              diagLog('NativeRecorder', 'No audio data received after 2s — mic may be unavailable');
+              if (this.onNoAudioData) { this.onNoAudioData(); }
+            }
+          }, 2000);
+
           this.process.on('close', () => {
+            diagLog('NativeRecorder', `Process closed. Total stdout: ${totalBytes} bytes in ${stdoutChunks} chunks`);
             writeStream.end();
           });
         }
@@ -200,8 +247,12 @@ export class NativeRecorder {
   // Minimum dB gap between noise and speech before silence detection activates.
   // Prevents false triggers when noise and speech are indistinguishable.
   private static readonly MIN_SNR_DB = 6;
-  // Absolute floor: anything below this dBFS is definitely silence regardless of calibration.
-  private static readonly ABSOLUTE_SILENCE_DBFS = -60;
+  // Absolute floor: anything below this dBFS is definitely silence regardless
+  // of calibration. Set low (-90) to accommodate Bluetooth headsets and other
+  // low-gain mics — e.g. BT mics can have speech at -72 dBFS and noise at -80.
+  // The adaptive threshold handles normal silence detection; this only catches
+  // truly dead/disconnected audio streams.
+  private static readonly ABSOLUTE_SILENCE_DBFS = -90;
 
   /**
    * Analyze raw PCM S16_LE audio data for silence detection using adaptive VAD.
@@ -381,6 +432,10 @@ export class NativeRecorder {
     this.onSilenceDetected = handler;
   }
 
+  setNoAudioDataHandler(handler: () => void): void {
+    this.onNoAudioData = handler;
+  }
+
   getElapsedTime(): number {
     if (!this._isRecording) return 0;
     return Date.now() - this.startTime;
@@ -393,6 +448,7 @@ export class NativeRecorder {
     this.startTime = 0;
     this.onUnexpectedExit = null;
     this.onSilenceDetected = null;
+    this.onNoAudioData = null;
     this.stderrData = '';
     this.stoppingGracefully = false;
     this.silenceTimeout = 0;

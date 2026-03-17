@@ -1,13 +1,19 @@
 import type { STTProvider, TranscribeOptions, TranscriptionResult } from '../types';
 
+const DEFAULT_MODEL = 'whisper-1';
+
 export class CustomProvider implements STTProvider {
   readonly name = 'Custom Whisper-Compatible';
   readonly id = 'custom';
+  private readonly model: string;
 
   constructor(
     private readonly endpoint: string,
     private readonly getApiKey?: () => Promise<string | undefined>,
-  ) {}
+    model?: string,
+  ) {
+    this.model = model || DEFAULT_MODEL;
+  }
 
   async transcribe(audio: Buffer, options: TranscribeOptions): Promise<TranscriptionResult> {
     if (!this.endpoint) {
@@ -34,7 +40,7 @@ export class CustomProvider implements STTProvider {
     parts.push(Buffer.from(
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="model"\r\n\r\n` +
-      `whisper-1\r\n`
+      `${this.model}\r\n`
     ));
 
     // language field (optional)

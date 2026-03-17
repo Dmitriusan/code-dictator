@@ -46,26 +46,76 @@ function getWeekStart(): string {
 }
 
 export class StorageService {
+  /**
+   * Mapping of old setting keys → new setting keys for migration.
+   * Used to silently migrate user settings from v1.x to v2.x key names.
+   */
+  private static readonly SETTING_MIGRATIONS: ReadonlyArray<[string, string]> = [
+    ['speechToTextProvider', 'provider'],
+    ['recordingMode', 'recording.mode'],
+    ['audioIsolation', 'recording.audioIsolation'],
+    ['maxRecordingDuration', 'recording.maxDuration'],
+    ['silenceTimeout', 'recording.silenceTimeout'],
+    ['codeAwareMode', 'textProcessing.codeAware'],
+    ['aiTextCleanup', 'textProcessing.aiCleanup'],
+    ['cleanupModel', 'textProcessing.aiModel'],
+    ['defaultTarget', 'output.target'],
+    ['autoCopyToClipboard', 'output.autoCopy'],
+    ['showCostIndicator', 'feedback.showCost'],
+    ['successFlashDuration', 'feedback.flashDuration'],
+    ['successFlashBackground', 'feedback.flashBackground'],
+    ['successfulTranscriptionSound', 'feedback.transcriptionSound'],
+  ];
+
   constructor(private readonly context: vscode.ExtensionContext) {}
+
+  /**
+   * Migrate settings from old key names to new ones.
+   * Copies user-set values (global and workspace) and clears old keys.
+   * Safe to call multiple times — skips keys that have no user-set value.
+   */
+  async migrateSettings(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('codeDictator');
+
+    for (const [oldKey, newKey] of StorageService.SETTING_MIGRATIONS) {
+      const inspection = config.inspect(oldKey);
+      if (!inspection) continue;
+
+      if (inspection.globalValue !== undefined) {
+        await config.update(newKey, inspection.globalValue, vscode.ConfigurationTarget.Global);
+        await config.update(oldKey, undefined, vscode.ConfigurationTarget.Global);
+      }
+      if (inspection.workspaceValue !== undefined) {
+        await config.update(newKey, inspection.workspaceValue, vscode.ConfigurationTarget.Workspace);
+        await config.update(oldKey, undefined, vscode.ConfigurationTarget.Workspace);
+      }
+      if (inspection.workspaceFolderValue !== undefined) {
+        await config.update(newKey, inspection.workspaceFolderValue, vscode.ConfigurationTarget.WorkspaceFolder);
+        await config.update(oldKey, undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+      }
+    }
+  }
 
   getSettings(): CodeDictatorSettings {
     const config = vscode.workspace.getConfiguration('codeDictator');
     return {
-      provider: config.get<ProviderType>('speechToTextProvider', 'elevenlabs'),
+      provider: config.get<ProviderType>('provider', 'elevenlabs'),
+      voiceModel: config.get<string>('voiceModel', 'auto'),
       customApiUrl: config.get<string>('customApiUrl', ''),
-      recordingMode: config.get<'toggle' | 'hold'>('recordingMode', 'toggle'),
-      audioIsolation: config.get<'off' | 'basic' | 'aggressive'>('audioIsolation', 'basic'),
+      recordingMode: config.get<'toggle' | 'hold'>('recording.mode', 'toggle'),
+      audioIsolation: config.get<'off' | 'basic' | 'aggressive'>('recording.audioIsolation', 'basic'),
       language: config.get<string>('language', ''),
       preferredLanguages: config.get<string[]>('preferredLanguages', []),
-      aiTextCleanup: config.get<boolean>('aiTextCleanup', false),
-      cleanupModel: config.get<string>('cleanupModel', 'gpt-4.1-nano'),
-      codeAwareMode: config.get<boolean>('codeAwareMode', true),
-      defaultTarget: config.get<'clipboard' | 'editor'>('defaultTarget', 'clipboard'),
-      autoCopyToClipboard: config.get<boolean>('autoCopyToClipboard', true),
-      successfulTranscriptionSound: config.get<boolean>('successfulTranscriptionSound', false),
-      showCostIndicator: config.get<boolean>('showCostIndicator', true),
-      maxRecordingDuration: config.get<number>('maxRecordingDuration', 300),
-      silenceTimeout: config.get<number>('silenceTimeout', 0),
+      fillerRemoval: config.get<boolean>('textProcessing.fillerRemoval', true),
+      aiTextCleanup: config.get<boolean>('textProcessing.aiCleanup', false),
+      cleanupModel: config.get<string>('textProcessing.aiModel', 'gpt-4.1-nano'),
+      codeAwareMode: config.get<boolean>('textProcessing.codeAware', true),
+      defaultTarget: config.get<'clipboard' | 'editor'>('output.target', 'clipboard'),
+      autoCopyToClipboard: config.get<boolean>('output.autoCopy', true),
+      successfulTranscriptionSound: config.get<boolean>('feedback.transcriptionSound', false),
+      showCostIndicator: config.get<boolean>('feedback.showCost', true),
+      maxRecordingDuration: config.get<number>('recording.maxDuration', 300),
+      silenceTimeout: config.get<number>('recording.silenceTimeout', 0),
       diagnosticLogging: config.get<boolean>('diagnosticLogging', false),
     };
   }

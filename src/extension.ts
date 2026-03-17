@@ -37,6 +37,8 @@ let isTransitioning = false;
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize services
   storageService = new StorageService(context);
+  // Migrate settings from old key names (v1.x → v2.x) before reading anything
+  storageService.migrateSettings().catch(() => { /* best-effort */ });
   configureDiagnosticLog(storageService.getSettings().diagnosticLogging);
   statusBar = new StatusBar();
   recorder = new RecorderManager(context.extensionUri);
@@ -85,9 +87,17 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    recorder.onTrackEnded(() => {
+      vscode.window.showWarningMessage(
+        'Code Dictator: No audio from microphone. This commonly happens when a Bluetooth headset switches to another device. Try switching to a different microphone in your OS sound settings.',
+      );
+    }),
+  );
+
+  context.subscriptions.push(
     recorder.onSilenceDetected(() => {
-      // Auto-stop on silence / max duration — respect the transition lock
-      // so this doesn't race with a concurrent user toggle press.
+      // Auto-stop on silence / max duration / track ended — respect the
+      // transition lock so this doesn't race with a concurrent user toggle.
       if (recorder.isRecording && !isTransitioning) {
         isTransitioning = true;
         handleStopAndTranscribe().finally(() => { isTransitioning = false; });
@@ -281,6 +291,15 @@ async function handleStopAndTranscribe(): Promise<void> {
     const audioPayload = await recorder.stopRecording();
     diagLog('Extension', `Recording stopped: ${Math.round(audioPayload.durationMs / 1000)}s, ${audioPayload.buffer.length} bytes, mime=${audioPayload.mimeType}`);
 
+    // Guard against empty/too-short recordings (e.g. stale timer, device disconnect)
+    const MIN_AUDIO_BYTES = 1000; // ~30ms of 16kHz 16-bit mono
+    if (audioPayload.buffer.length < MIN_AUDIO_BYTES) {
+      statusBar.updateState('idle');
+      diagLog('Extension', `Audio too short (${audioPayload.buffer.length} bytes), skipping transcription`);
+      statusBar.showTransientMessage('$(warning) Recording too short', 2000);
+      return;
+    }
+
     // Transcribe
     const provider = createProvider(settings, (p) => storageService.getApiKey(p));
     let result: TranscriptionResult;
@@ -308,10 +327,12 @@ async function handleStopAndTranscribe(): Promise<void> {
     // Step 1: Auto-formatting (always applied)
     text = format(text);
 
-    // Step 2: Language-aware filler word removal (always applied, no API cost)
+    // Step 2: Language-aware filler word removal (no API cost)
     // Priority: provider-detected language → user setting → English fallback
-    const detectedLang = result.language || settings.language || 'en';
-    text = removeFillerWords(text, detectedLang);
+    if (settings.fillerRemoval) {
+      const detectedLang = result.language || settings.language || 'en';
+      text = removeFillerWords(text, detectedLang);
+    }
 
     // Step 3: Code-aware replacements
     if (settings.codeAwareMode) {
@@ -443,7 +464,9 @@ async function handleTranscribeFile(): Promise<void> {
     // Post-process
     let text = result.text;
     text = format(text);
-    text = removeFillerWords(text, result.language || settings.language || 'en');
+    if (settings.fillerRemoval) {
+      text = removeFillerWords(text, result.language || settings.language || 'en');
+    }
 
     if (settings.codeAwareMode) {
       text = applyCodeAware(text);

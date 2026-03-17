@@ -28,8 +28,8 @@ vi.mock('vscode', () => ({
     workspace: {
       getConfiguration: vi.fn(() => ({
         get: vi.fn((key: string, defaultValue?: unknown) => {
-          if (key === 'successFlashDuration') return 5;
-          if (key === 'successFlashBackground') return false;
+          if (key === 'feedback.flashDuration') return 5;
+          if (key === 'feedback.flashBackground') return false;
           return defaultValue;
         }),
       })),
@@ -45,8 +45,8 @@ vi.mock('vscode', () => ({
   workspace: {
     getConfiguration: vi.fn(() => ({
       get: vi.fn((key: string, defaultValue?: unknown) => {
-        if (key === 'successFlashDuration') return 5;
-        if (key === 'successFlashBackground') return false;
+        if (key === 'feedback.flashDuration') return 5;
+        if (key === 'feedback.flashBackground') return false;
         return defaultValue;
       }),
     })),
