@@ -60,7 +60,7 @@ describe('LLMCleanup.cleanup()', () => {
 
     const body = JSON.parse(options.body);
     expect(body.model).toBe('gpt-4.1-mini');
-    expect(body.temperature).toBe(0.1);
+    expect(body.temperature).toBe(0);
     expect(body.messages).toHaveLength(2);
     expect(body.messages[0].role).toBe('system');
     expect(body.messages[1].role).toBe('user');
@@ -179,7 +179,7 @@ describe('LLMCleanup.cleanup()', () => {
     expect(body.max_tokens).toBe(256); // Math.max(2*2, 256) = 256
   });
 
-  it('includes detected language in system prompt', async () => {
+  it('includes detected language in system prompt and user message', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -192,12 +192,14 @@ describe('LLMCleanup.cleanup()', () => {
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     const systemPrompt = body.messages[0].content;
+    const userMessage = body.messages[1].content;
     expect(systemPrompt).toContain('English');
-    expect(systemPrompt).toContain('Ukrainian');
-    expect(systemPrompt).toContain('detected as English');
+    expect(systemPrompt).toContain('MUST be in English');
+    // User message gets a language tag prefix
+    expect(userMessage).toBe('[English] test');
   });
 
-  it('includes language constraint at the top of the prompt', async () => {
+  it('puts language constraint before cleanup instructions', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -210,12 +212,12 @@ describe('LLMCleanup.cleanup()', () => {
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     const systemPrompt: string = body.messages[0].content;
-    const criticalIndex = systemPrompt.indexOf('CRITICAL RULE');
-    const processorIndex = systemPrompt.indexOf('speech-to-text post-processor');
-    expect(criticalIndex).toBeLessThan(processorIndex);
+    const langIndex = systemPrompt.indexOf('LANGUAGE:');
+    const cleanupIndex = systemPrompt.indexOf('Clean up');
+    expect(langIndex).toBeLessThan(cleanupIndex);
   });
 
-  it('adds English even when not in preferred languages', async () => {
+  it('falls back to preferred languages when no detected language', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -224,29 +226,54 @@ describe('LLMCleanup.cleanup()', () => {
     });
     globalThis.fetch = mockFetch;
 
-    await cleanup('test', 'sk-test-key', undefined, ['uk'], 'uk');
+    await cleanup('test', 'sk-test-key', undefined, ['uk']);
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     const systemPrompt = body.messages[0].content;
     expect(systemPrompt).toContain('English');
     expect(systemPrompt).toContain('Ukrainian');
+    // No language tag in user message without detected language
+    expect(body.messages[1].content).toBe('test');
   });
 
-  it('works without detected language or preferred languages', async () => {
+  it('discards result when LLM switches script (Cyrillic → Latin)', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        choices: [{ message: { content: 'cleaned' } }],
+        // Input is Ukrainian (Cyrillic), output is Polish (Latin) — script mismatch
+        choices: [{ message: { content: 'Okej, zobaczmy jak to dziala' } }],
       }),
     });
     globalThis.fetch = mockFetch;
 
-    await cleanup('test', 'sk-test-key');
+    const result = await cleanup('Окей, подивимось як це працює', 'sk-test-key', undefined, ['en', 'uk'], 'uk');
+    // Should return original text because script changed
+    expect(result).toBe('Окей, подивимось як це працює');
+  });
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    const systemPrompt = body.messages[0].content;
-    // Should still have English as the default
-    expect(systemPrompt).toContain('English');
-    expect(systemPrompt).toContain('CRITICAL RULE');
+  it('accepts result when script is preserved', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Окей, подивимось як це працює.' } }],
+      }),
+    });
+    globalThis.fetch = mockFetch;
+
+    const result = await cleanup('Окей, подивимось як це працює', 'sk-test-key', undefined, ['en', 'uk'], 'uk');
+    expect(result).toBe('Окей, подивимось як це працює.');
+  });
+
+  it('does not validate script for Latin-script languages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Hello world' } }],
+      }),
+    });
+    globalThis.fetch = mockFetch;
+
+    const result = await cleanup('um hello world', 'sk-test-key', undefined, ['en'], 'en');
+    expect(result).toBe('Hello world');
   });
 });

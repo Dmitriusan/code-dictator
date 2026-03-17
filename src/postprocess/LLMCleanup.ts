@@ -3,43 +3,87 @@ import { LANGUAGES } from '../types';
 const OPENAI_CHAT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-4.1-nano';
 
+/** Unicode script ranges for output language validation. */
+const SCRIPT_RANGES: Record<string, RegExp> = {
+  uk: /[\u0400-\u04FF]/,   // Cyrillic
+  ru: /[\u0400-\u04FF]/,
+  bg: /[\u0400-\u04FF]/,
+  sr: /[\u0400-\u04FF]/,
+  el: /[\u0370-\u03FF]/,   // Greek
+  he: /[\u0590-\u05FF]/,   // Hebrew
+  ar: /[\u0600-\u06FF]/,   // Arabic
+  th: /[\u0E00-\u0E7F]/,   // Thai
+  zh: /[\u4E00-\u9FFF]/,   // CJK
+  ja: /[\u3040-\u30FF]/,   // Hiragana + Katakana
+  ko: /[\uAC00-\uD7AF]/,   // Hangul
+  hi: /[\u0900-\u097F]/,   // Devanagari
+  bn: /[\u0980-\u09FF]/,   // Bengali
+  ta: /[\u0B80-\u0BFF]/,   // Tamil
+};
+
+/**
+ * Check whether the LLM output preserved the expected script.
+ * If the input uses a distinctive script (Cyrillic, CJK, etc.) but
+ * the output lost it entirely, the model switched languages.
+ */
+function hasScriptMismatch(input: string, output: string, detectedLanguage?: string): boolean {
+  if (!detectedLanguage) return false;
+
+  const expectedScript = SCRIPT_RANGES[detectedLanguage];
+  if (!expectedScript) return false; // Latin-script languages — can't validate by script
+
+  const inputHasScript = expectedScript.test(input);
+  const outputHasScript = expectedScript.test(output);
+
+  // Input had the expected script but output lost it entirely
+  return inputHasScript && !outputHasScript;
+}
+
+function resolveLanguageName(code: string): string | undefined {
+  return LANGUAGES.find(l => l.code === code)?.name;
+}
+
 function buildSystemPrompt(detectedLanguage?: string, preferredLanguages?: string[]): string {
-  // Resolve language names for the constraint
-  const langCodes = new Set(preferredLanguages ?? []);
-  langCodes.add('en'); // Always include English
-  if (detectedLanguage) langCodes.add(detectedLanguage);
+  const detectedName = detectedLanguage ? resolveLanguageName(detectedLanguage) : undefined;
 
-  const langNames = [...langCodes]
-    .map(code => LANGUAGES.find(l => l.code === code)?.name)
-    .filter(Boolean);
+  // Keep the prompt short and direct — nano models lose focus on long instructions.
+  const lines: string[] = [];
 
-  const detectedName = detectedLanguage
-    ? LANGUAGES.find(l => l.code === detectedLanguage)?.name
-    : undefined;
+  if (detectedName) {
+    lines.push(`LANGUAGE: ${detectedName}. Your output MUST be in ${detectedName}. Do NOT switch to any other language.`);
+  } else {
+    // Resolve allowed languages for the constraint
+    const langCodes = new Set(preferredLanguages ?? []);
+    langCodes.add('en');
+    const langNames = [...langCodes]
+      .map(code => resolveLanguageName(code))
+      .filter(Boolean);
+    if (langNames.length > 0) {
+      lines.push(`LANGUAGE: Output MUST be in one of: ${langNames.join(', ')}. No other languages.`);
+    }
+  }
 
-  // Language constraint goes FIRST — nano models respect top-of-prompt rules better.
-  const langConstraint = langNames.length > 0
-    ? `CRITICAL RULE: The output text MUST be in one of these languages ONLY: ${langNames.join(', ')}. NEVER output text in any other language (no Kazakh, no Belarusian, no other languages). Code snippets and technical terms in English are exempt.`
-    : '';
-
-  const detectedHint = detectedName
-    ? `The input language was detected as ${detectedName}. Output MUST be in ${detectedName}.`
-    : '';
-
-  return [
-    langConstraint,
-    detectedHint,
+  lines.push(
     '',
-    `You are a speech-to-text post-processor for developer dictation. Clean up the transcribed text:`,
-    ``,
-    `1. Remove spurious commas that speech-to-text engines insert at speech pauses. Example: "Check out the, project, folder" → "Check out the project folder". Keep only grammatically correct commas (lists, clauses, "Also, …").`,
-    `2. Remove any remaining filler words (um, uh, like, you know, basically, sort of).`,
-    `3. Fix punctuation and capitalization.`,
-    `4. Do NOT rephrase, summarize, or add words — preserve the speaker's exact meaning and vocabulary.`,
-    `5. KEEP the text in the SAME language as the input. Never translate to another language.`,
-    ``,
-    `Output ONLY the cleaned text, nothing else.`,
-  ].filter(Boolean).join('\n');
+    'Clean up this speech-to-text transcription:',
+    '- Remove spurious commas from speech pauses (keep grammatical ones)',
+    '- Remove filler words (um, uh, like, you know)',
+    '- Fix punctuation and capitalization',
+    '- Do NOT rephrase or add words',
+    '- KEEP the SAME language — never translate',
+    '',
+    'Output ONLY the cleaned text.',
+  );
+
+  return lines.filter(l => l !== undefined).join('\n');
+}
+
+function buildUserMessage(text: string, detectedLanguage?: string): string {
+  const detectedName = detectedLanguage ? resolveLanguageName(detectedLanguage) : undefined;
+  if (detectedName) {
+    return `[${detectedName}] ${text}`;
+  }
+  return text;
 }
 
 /**
@@ -75,9 +119,9 @@ export async function cleanup(
         model: requestModel,
         messages: [
           { role: 'system', content: buildSystemPrompt(detectedLanguage, preferredLanguages) },
-          { role: 'user', content: text },
+          { role: 'user', content: buildUserMessage(text, detectedLanguage) },
         ],
-        temperature: 0.1,
+        temperature: 0,
         max_tokens: Math.max(text.length * 2, 256),
       }),
     });
@@ -97,6 +141,13 @@ export async function cleanup(
 
     const cleaned = data.choices?.[0]?.message?.content?.trim();
     if (!cleaned) {
+      return text;
+    }
+
+    // Safety net: if the model switched scripts (e.g. Cyrillic → Latin),
+    // discard the cleanup and return the original text.
+    if (hasScriptMismatch(text, cleaned, detectedLanguage)) {
+      console.warn('Code Dictator: LLM cleanup changed script, discarding result');
       return text;
     }
 
