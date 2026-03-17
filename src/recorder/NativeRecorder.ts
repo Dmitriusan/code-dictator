@@ -24,6 +24,7 @@ export class NativeRecorder {
   private onNoAudioData: (() => void) | null = null;
   private stderrData = '';
   private stoppingGracefully = false;
+  private writeStream: fs.WriteStream | null = null;
   private silenceTimeout = 0;
   private silenceStart: number | null = null;
   private silenceCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -152,7 +153,8 @@ export class NativeRecorder {
 
         // If piping stdout, write raw PCM to file and analyze for silence
         if (useStdoutPipe) {
-          const writeStream = fs.createWriteStream(this.tempFile);
+          this.writeStream = fs.createWriteStream(this.tempFile);
+          const writeStream = this.writeStream;
           // Write WAV header (will be finalized on stop)
           writeStream.write(createWavHeader());
           let totalBytes = 0;
@@ -180,7 +182,7 @@ export class NativeRecorder {
 
           this.process.on('close', () => {
             diagLog('NativeRecorder', `Process closed. Total stdout: ${totalBytes} bytes in ${stdoutChunks} chunks`);
-            writeStream.end();
+            // writeStream is flushed and closed in stop() to avoid race conditions
           });
         }
 
@@ -360,38 +362,49 @@ export class NativeRecorder {
       let resolved = false;
       let killTimeout: ReturnType<typeof setTimeout> | null = null;
 
+      const readAndResolve = () => {
+        try {
+          if (fs.existsSync(tempFile)) {
+            const buffer = fs.readFileSync(tempFile);
+
+            // Fix WAV header sizes — handles both stdout-piped recordings
+            // (placeholder header with max sizes) and files from processes killed
+            // before finalizing (e.g. Windows TerminateProcess, Unix SIGKILL).
+            if (buffer.length > 44 && buffer.toString('ascii', 0, 4) === 'RIFF') {
+              const dataSize = buffer.length - 44;
+              buffer.writeUInt32LE(dataSize + 36, 4); // RIFF chunk size
+              buffer.writeUInt32LE(dataSize, 40);      // data chunk size
+            }
+
+            fs.unlinkSync(tempFile);
+            this.cleanup();
+            resolve({ buffer, mimeType: 'audio/wav', durationMs });
+          } else {
+            this.cleanup();
+            reject(new Error('Recording file not found'));
+          }
+        } catch (err) {
+          this.cleanup();
+          reject(err);
+        }
+      };
+
       const handleClose = () => {
         if (resolved) return;
         resolved = true;
         if (killTimeout) clearTimeout(killTimeout);
 
-        // Small delay to let the write stream flush
-        setTimeout(() => {
-          try {
-            if (fs.existsSync(tempFile)) {
-              const buffer = fs.readFileSync(tempFile);
-
-              // Fix WAV header sizes — handles both stdout-piped recordings
-              // (placeholder header with max sizes) and files from processes killed
-              // before finalizing (e.g. Windows TerminateProcess, Unix SIGKILL).
-              if (buffer.length > 44 && buffer.toString('ascii', 0, 4) === 'RIFF') {
-                const dataSize = buffer.length - 44;
-                buffer.writeUInt32LE(dataSize + 36, 4); // RIFF chunk size
-                buffer.writeUInt32LE(dataSize, 40);      // data chunk size
-              }
-
-              fs.unlinkSync(tempFile);
-              this.cleanup();
-              resolve({ buffer, mimeType: 'audio/wav', durationMs });
-            } else {
-              this.cleanup();
-              reject(new Error('Recording file not found'));
-            }
-          } catch (err) {
-            this.cleanup();
-            reject(err);
-          }
-        }, 100);
+        // Wait for writeStream to flush all buffered data to disk
+        let readDone = false;
+        const readOnce = () => { if (!readDone) { readDone = true; readAndResolve(); } };
+        if (this.writeStream) {
+          this.writeStream.end(readOnce);
+          // Safety timeout in case 'finish' callback never fires
+          setTimeout(readOnce, 2000);
+        } else {
+          // File-based recording (no stdout pipe) — small delay for OS flush
+          setTimeout(readOnce, 100);
+        }
       };
 
       proc.on('close', handleClose);
@@ -459,6 +472,7 @@ export class NativeRecorder {
     this.onNoAudioData = null;
     this.stderrData = '';
     this.stoppingGracefully = false;
+    this.writeStream = null;
     this.silenceTimeout = 0;
     this.silenceStart = null;
     this.chunkCount = 0;

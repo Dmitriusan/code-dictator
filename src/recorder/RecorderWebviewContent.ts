@@ -67,6 +67,7 @@ export function getRecorderWebviewContent(nonce: string): string {
     let currentSilenceTimeout = 0;
     let currentMaxDuration = 300;
     let cancelled = false;
+    let hasSeenSpeech = false;
 
     function updateStatus(text, isRecording) {
       const el = document.getElementById('status');
@@ -87,6 +88,7 @@ export function getRecorderWebviewContent(nonce: string): string {
 
     async function startRecording(isolation, silenceTimeout, maxDuration) {
       cancelled = false;
+      hasSeenSpeech = false;
       currentIsolation = isolation;
       currentSilenceTimeout = silenceTimeout;
       currentMaxDuration = maxDuration;
@@ -281,6 +283,8 @@ export function getRecorderWebviewContent(nonce: string): string {
           const silenceThreshold = 10; // Amplitude threshold (0-255 range)
           let silenceCheckCount = 0;
 
+          const speechThreshold = 20; // Higher than silenceThreshold — confirms real speech
+
           silenceCheckInterval = setInterval(() => {
             analyser.getByteFrequencyData(dataArray);
             let sum = 0;
@@ -290,13 +294,23 @@ export function getRecorderWebviewContent(nonce: string): string {
             const average = sum / bufferLength;
             silenceCheckCount++;
 
+            // Track whether we've seen speech — don't trigger silence
+            // timeout until the user has actually started talking
+            if (!hasSeenSpeech && average >= speechThreshold) {
+              hasSeenSpeech = true;
+              vscode.postMessage({ type: 'diagnosticLog', message: 'Webview VAD: first speech detected, avg=' + average.toFixed(1) });
+            }
+
             // Log audio levels every 5 seconds for diagnostics
             if (silenceCheckCount % 25 === 0) {
               const elapsed = Math.round((Date.now() - recordingStart) / 1000);
               const micTrack = stream.getAudioTracks()[0];
               const trackInfo = micTrack ? ('muted=' + micTrack.muted + ' readyState=' + micTrack.readyState) : 'no-track';
-              vscode.postMessage({ type: 'diagnosticLog', message: 'Audio level: avg=' + average.toFixed(1) + ', silentFor=' + (silenceStart ? Math.round((Date.now() - silenceStart) / 1000) + 's' : 'no') + ', elapsed=' + elapsed + 's, track: ' + trackInfo });
+              vscode.postMessage({ type: 'diagnosticLog', message: 'Audio level: avg=' + average.toFixed(1) + ', silentFor=' + (silenceStart ? Math.round((Date.now() - silenceStart) / 1000) + 's' : 'no') + ', speech=' + hasSeenSpeech + ', elapsed=' + elapsed + 's, track: ' + trackInfo });
             }
+
+            // Only detect silence after speech has been heard
+            if (!hasSeenSpeech) return;
 
             if (average < silenceThreshold) {
               if (silenceStart === null) {

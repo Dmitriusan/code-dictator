@@ -110,7 +110,7 @@
         "command": "codeDictator.cancelRecording",
         "key": "escape",
         "mac": "escape",
-        "when": "codeDictator.isRecording"
+        "when": "codeDictator.isRecording || codeDictator.isProcessing"
       }
     ],
     "configuration": [
@@ -553,7 +553,7 @@
       "commandPalette": [
         {
           "command": "codeDictator.cancelRecording",
-          "when": "codeDictator.isRecording"
+          "when": "codeDictator.isRecording || codeDictator.isProcessing"
         }
       ]
     }

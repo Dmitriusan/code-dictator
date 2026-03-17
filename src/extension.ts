@@ -33,6 +33,12 @@ let startRecordingPromise: Promise<void> | null = null;
  * Set while a start/stop operation is in flight so rapid Alt+D presses are ignored.
  */
 let isTransitioning = false;
+/**
+ * AbortController for the in-flight transcription/cleanup pipeline.
+ * Set at the start of handleStopAndTranscribe(), cleared on completion.
+ * Allows the user to cancel transcription or AI cleanup via Escape.
+ */
+let pipelineAbort: AbortController | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize services
@@ -74,8 +80,9 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar.updateLanguage(settings.language);
   statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);
 
-  // Set initial recording context
+  // Set initial recording/processing context
   vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+  vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', false);
 
   // Wire up recorder events
   context.subscriptions.push(
@@ -140,11 +147,16 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('codeDictator.cancelRecording', () => {
       if (recorder.isRecording) {
+        // Cancel active recording
         holdController.cancel(); // no-op if not in hold mode
         recorder.cancelRecording();
         statusBar.updateState('idle');
         vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
         statusBar.showTransientMessage('$(x) Cancelled', 1500);
+      } else if (pipelineAbort) {
+        // Cancel in-flight transcription or AI cleanup
+        diagLog('Extension', 'Cancelling transcription/cleanup pipeline');
+        pipelineAbort.abort();
       }
     }),
   );
@@ -265,13 +277,15 @@ async function handleStartRecording(): Promise<void> {
 
   try {
     diagLog('Extension', `Starting recording: provider=${settings.provider}, isolation=${settings.audioIsolation}, maxDuration=${settings.maxRecordingDuration}s`);
-    statusBar.updateState('recording');
-    vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', true);
     await recorder.startRecording(
       settings.audioIsolation,
       settings.silenceTimeout,
       settings.maxRecordingDuration,
     );
+    // Show recording indicator AFTER recorder is ready — so the user
+    // sees the red mic icon only when audio is actually being captured
+    statusBar.updateState('recording');
+    vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', true);
   } catch (error) {
     statusBar.updateState('idle');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
@@ -283,10 +297,15 @@ async function handleStartRecording(): Promise<void> {
 async function handleStopAndTranscribe(): Promise<void> {
   const settings = storageService.getSettings();
 
+  // Create an AbortController so the user can cancel transcription/cleanup via Escape
+  const abort = new AbortController();
+  pipelineAbort = abort;
+
   try {
     // Stop recording and get audio data
     statusBar.updateState('transcribing');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+    vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', true);
 
     const audioPayload = await recorder.stopRecording();
     diagLog('Extension', `Recording stopped: ${Math.round(audioPayload.durationMs / 1000)}s, ${audioPayload.buffer.length} bytes, mime=${audioPayload.mimeType}`);
@@ -307,6 +326,7 @@ async function handleStopAndTranscribe(): Promise<void> {
       result = await provider.transcribe(audioPayload.buffer, {
         language: settings.language || undefined,
         mimeType: audioPayload.mimeType,
+        signal: abort.signal,
       });
     } catch (error) {
       statusBar.updateState('idle');
@@ -348,7 +368,7 @@ async function handleStopAndTranscribe(): Promise<void> {
         diagLog('Extension', 'Starting AI cleanup with model=' + settings.cleanupModel);
         statusBar.updateState('cleaning');
         try {
-          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages, detectedLang);
+          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages, detectedLang, abort.signal);
           diagLog('Extension', 'AI cleanup complete');
         } catch (error) {
           console.warn('Code Dictator: AI cleanup failed, using raw text', error);
@@ -393,9 +413,16 @@ async function handleStopAndTranscribe(): Promise<void> {
     statusBar.updateState('idle');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
     const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes('cancelled')) {
+    // Suppress error messages for user-initiated cancellations (AbortError from fetch)
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      diagLog('Extension', 'Pipeline cancelled by user');
+      statusBar.showTransientMessage('$(x) Cancelled', 1500);
+    } else if (!message.includes('cancelled')) {
       vscode.window.showErrorMessage(`Code Dictator: ${message}`);
     }
+  } finally {
+    pipelineAbort = null;
+    vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', false);
   }
 }
 

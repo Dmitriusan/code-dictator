@@ -77,6 +77,7 @@ export class OpenAIProvider implements STTProvider {
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
       },
       body,
+      signal: options.signal,
     });
 
     if (!response.ok) {

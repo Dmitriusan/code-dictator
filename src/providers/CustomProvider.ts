@@ -70,6 +70,7 @@ export class CustomProvider implements STTProvider {
       method: 'POST',
       headers,
       body,
+      signal: options.signal,
     });
 
     if (!response.ok) {

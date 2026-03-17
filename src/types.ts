@@ -3,6 +3,7 @@ export interface TranscribeOptions {
   language?: string;
   format?: string;
   mimeType?: string;
+  signal?: AbortSignal;
 }
 
 export interface TranscriptionResult {

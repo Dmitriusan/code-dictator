@@ -97,6 +97,7 @@ export async function cleanup(
   model?: string,
   preferredLanguages?: string[],
   detectedLanguage?: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!text.trim()) {
     return text;
@@ -124,6 +125,7 @@ export async function cleanup(
         temperature: 0,
         max_tokens: Math.max(text.length * 2, 256),
       }),
+      signal,
     });
 
     if (!response.ok) {
