@@ -2,6 +2,30 @@
 
 All notable changes to Code Dictator will be documented in this file.
 
+## [1.1.0] - 2026-03-17
+
+### Added
+- Voice model selection — choose between provider models (e.g. `scribe_v2`, `whisper-1`, `gpt-4o-transcribe`) or leave on auto
+- Configurable filler word removal toggle (`textProcessing.fillerRemoval`)
+- Bluetooth/wireless headset disconnect detection with user-friendly warning message
+- Linux: prefer `parecord`/`pw-record` over `arecord` for better Bluetooth audio support
+- Empty/too-short recording guard to prevent transcription of silence from device disconnects
+- No-audio-data detection (2s timeout) in native recorder
+- Clearer ElevenLabs API key setup instructions in walkthrough and setup wizard
+
+### Changed
+- Settings restructured into logical groups: `recording.*`, `textProcessing.*`, `output.*`, `feedback.*` (old flat keys are migrated automatically)
+- README updated with grouped settings reference, provider comparison table, and keyboard shortcut guidance
+
+### Fixed
+- LLM text cleanup no longer outputs in random languages (e.g. Kazakh) — detected language from STT provider is now passed to the cleanup prompt with a top-of-prompt language constraint
+- Status bar transient messages no longer interrupted by stale timers during recording
+
+## [1.0.2] - 2026-03-16
+
+### Fixed
+- Release workflow improvements
+
 ## [1.0.1] - 2026-03-16
 
 ### Fixed

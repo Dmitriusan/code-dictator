@@ -21,7 +21,7 @@ Your words are transcribed in seconds, ready to paste into any AI chat, terminal
 ## Get Started in 30 Seconds
 
 1. **Install** Code Dictator from the VS Code Marketplace
-2. **Get a free API key** from [ElevenLabs](https://try.elevenlabs.io/rgoomc9z8dvv) (no credit card required)
+2. **Get a free API key** from [ElevenLabs](https://try.elevenlabs.io/rgoomc9z8dvv) — sign up, find **Developers** (bottom of the left panel) → **API Keys** → **Create API Key**
 3. **Press `Alt+D`**, speak your prompt, press `Alt+D` again, and **paste** into any AI chat
 
 That's it. Your voice → clipboard → wherever you need it.
@@ -58,9 +58,10 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 
 ## Providers
 
-| | ElevenLabs | OpenAI Whisper | Custom API |
+| | ElevenLabs | OpenAI | Custom API |
 |---|---|---|---|
-| **Accuracy** | Excellent (Scribe v2) | Good (Whisper) | Model-dependent |
+| **Models** | Scribe v2, v1 | GPT-4o Transcribe, Whisper | Any Whisper-compatible |
+| **Accuracy** | Excellent | Very good (GPT-4o) / Good (Whisper) | Model-dependent |
 | **Languages** | 90+ | 57 | Varies |
 | **Free tier** | **Yes** (2.5 hrs/month) | No | N/A |
 | **Latency** | ~1-2s | ~1-3s | Varies |
@@ -111,28 +112,53 @@ When enabled (default), spoken programming terms become symbols:
 | Toggle recording | `Alt+D` |
 | Cancel recording | `Escape` (while recording) |
 
-Customize in Keyboard Shortcuts (`Ctrl+K Ctrl+S`).
+Customize in Keyboard Shortcuts (`Ctrl+K Ctrl+S`). **For a true push-to-talk feel, rebind toggle recording to a single key you never use — `Pause/Break`, `ScrollLock`, or a spare mouse button work great as a dedicated dictation key.**
 
 ---
 
 ## All Settings
 
+Settings are grouped into sections in the VS Code Settings UI.
+
+**Speech Recognition**
+
 | Setting | Default | Description |
 |---|---|---|
-| `speechToTextProvider` | `elevenlabs` | `elevenlabs`, `openai`, `custom` |
-| `recordingMode` | `toggle` | `toggle` or `hold` |
+| `provider` | `elevenlabs` | `elevenlabs`, `openai`, `custom` |
+| `voiceModel` | `auto` | STT model (`auto`, `scribe_v2`, `whisper-1`, `gpt-4o-transcribe`, etc.) |
 | `language` | *(auto)* | Language code or auto-detect |
 | `preferredLanguages` | `[]` | Shortlist for quick switching |
-| `audioIsolation` | `basic` | `off`, `basic`, `aggressive` |
-| `codeAwareMode` | `true` | Spoken-to-symbol conversion |
-| `aiTextCleanup` | `false` | LLM cleanup (requires OpenAI key) |
-| `cleanupModel` | `gpt-4.1-nano` | Model for text cleanup |
-| `defaultTarget` | `clipboard` | `clipboard` or `editor` |
-| `autoCopyToClipboard` | `true` | Also copy to clipboard |
-| `maxRecordingDuration` | `300` | Max seconds (10-3600) |
-| `silenceTimeout` | `0` | Auto-stop on silence (0 = off) |
-| `showCostIndicator` | `true` | Cost in status bar |
-| `successfulTranscriptionSound` | `false` | Chime on completion |
+
+**Text Processing**
+
+| Setting | Default | Description |
+|---|---|---|
+| `textProcessing.codeAware` | `true` | Spoken-to-symbol conversion |
+| `textProcessing.aiCleanup` | `false` | LLM cleanup (requires OpenAI key) |
+| `textProcessing.aiModel` | `gpt-4.1-nano` | Model for text cleanup |
+
+**Recording**
+
+| Setting | Default | Description |
+|---|---|---|
+| `recording.mode` | `toggle` | `toggle` or `hold` |
+| `recording.audioIsolation` | `basic` | `off`, `basic`, `aggressive` |
+| `recording.maxDuration` | `300` | Max seconds (10-3600) |
+| `recording.silenceTimeout` | `0` | Auto-stop on silence (0 = off) |
+
+**Output**
+
+| Setting | Default | Description |
+|---|---|---|
+| `output.target` | `clipboard` | `clipboard` or `editor` |
+| `output.autoCopy` | `true` | Also copy to clipboard |
+
+**Feedback**
+
+| Setting | Default | Description |
+|---|---|---|
+| `feedback.showCost` | `true` | Cost in status bar |
+| `feedback.transcriptionSound` | `false` | Chime on completion |
 
 All settings under the `codeDictator.*` namespace.
 
