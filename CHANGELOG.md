@@ -4,6 +4,8 @@ All notable changes to Code Dictator will be documented in this file.
 
 ## [1.1.0] - 2026-03-17
 
+Stability improvements and bug fixes. Better Bluetooth headphone support on all platforms — the extension now detects when a wireless device disconnects mid-recording and shows a helpful message instead of producing empty transcriptions. On Linux, PipeWire/PulseAudio recorders are preferred over ALSA for reliable Bluetooth audio routing.
+
 ### Added
 - Voice model selection — choose between provider models (e.g. `scribe_v2`, `whisper-1`, `gpt-4o-transcribe`) or leave on auto
 - Configurable filler word removal toggle (`textProcessing.fillerRemoval`)
