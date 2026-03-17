@@ -371,7 +371,9 @@ export class NativeRecorder {
             if (fs.existsSync(tempFile)) {
               const buffer = fs.readFileSync(tempFile);
 
-              // Fix WAV header sizes if we wrote raw PCM with a placeholder header
+              // Fix WAV header sizes — handles both stdout-piped recordings
+              // (placeholder header with max sizes) and files from processes killed
+              // before finalizing (e.g. Windows TerminateProcess, Unix SIGKILL).
               if (buffer.length > 44 && buffer.toString('ascii', 0, 4) === 'RIFF') {
                 const dataSize = buffer.length - 44;
                 buffer.writeUInt32LE(dataSize + 36, 4); // RIFF chunk size
@@ -401,10 +403,14 @@ export class NativeRecorder {
         reject(err);
       });
 
-      // Graceful stop
+      // Graceful stop: on Unix, SIGTERM lets the process flush buffers and
+      // finalize the WAV file. On Windows, Node.js maps all signals to
+      // TerminateProcess() (immediate kill) — the WAV header fixup in
+      // handleClose() corrects any incomplete headers.
       proc.kill('SIGTERM');
 
-      // Force kill after 5s
+      // Force kill after 5s if the process hasn't exited.
+      // On Windows SIGTERM already killed the process, so this is a no-op.
       killTimeout = setTimeout(() => {
         if (!resolved) {
           try { proc.kill('SIGKILL'); } catch { /* ignore */ }
@@ -416,6 +422,8 @@ export class NativeRecorder {
 
   cancel(): void {
     if (this.process) {
+      // SIGKILL: unconditional immediate kill on all platforms.
+      // Node.js maps this to TerminateProcess() on Windows.
       try { this.process.kill('SIGKILL'); } catch { /* ignore */ }
     }
     if (this.tempFile && fs.existsSync(this.tempFile)) {
