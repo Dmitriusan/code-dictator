@@ -154,13 +154,18 @@ export class RecorderManager implements vscode.Disposable {
     this._isRecording = true;
     diagLog('RecorderManager', `Started native recording, silenceTimeout=${silenceTimeout}s`);
 
-    // Max duration enforcement
+    // Max duration enforcement — clear any stale timeout first
+    this.clearMaxDurationTimeout();
     if (maxDuration > 0) {
+      const startedAt = Date.now();
       this.maxDurationTimeout = setTimeout(() => {
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
         this.maxDurationTimeout = undefined;
         if (this._isRecording && this.nativeRecorder?.isRecording) {
-          diagLog('RecorderManager', 'Max duration reached, auto-stopping');
+          diagLog('RecorderManager', `Max duration reached after ${elapsed}s (limit=${maxDuration}s), auto-stopping`);
           this.emit('silenceDetected'); // Reuse silence signal to auto-stop
+        } else {
+          diagLog('RecorderManager', `Max duration timer fired after ${elapsed}s but recording already stopped — ignoring`);
         }
       }, maxDuration * 1000);
     }
@@ -168,12 +173,14 @@ export class RecorderManager implements vscode.Disposable {
 
   private clearMaxDurationTimeout(): void {
     if (this.maxDurationTimeout) {
+      diagLog('RecorderManager', 'Clearing max duration timeout');
       clearTimeout(this.maxDurationTimeout);
       this.maxDurationTimeout = undefined;
     }
   }
 
   async stopRecording(): Promise<AudioDataPayload> {
+    diagLog('RecorderManager', `stopRecording called. maxDurationTimeout=${this.maxDurationTimeout !== undefined ? 'SET' : 'NONE'}, isRecording=${this._isRecording}`);
     this.clearMaxDurationTimeout();
 
     // If audio data already arrived (e.g. track ended due to Bluetooth
@@ -453,6 +460,7 @@ export class RecorderManager implements vscode.Disposable {
         break;
       }
       case 'silenceDetected': {
+        diagLog('RecorderManager', 'silenceDetected received from webview');
         this.emit('silenceDetected');
         break;
       }
