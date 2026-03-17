@@ -298,15 +298,15 @@
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {
-    "@types/node": "^20.x",
+    "@types/node": "^25.x",
     "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^2.4.0",
     "@vscode/vsce": "^3.0.0",
-    "esbuild": "^0.24.0",
-    "eslint": "^9.0.0",
+    "esbuild": "^0.27.4",
+    "eslint": "^10.0.3",
     "typescript": "^5.5.0",
-    "vitest": "^2.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "vitest": "^4.1.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
     "@typescript-eslint/parser": "^8.0.0"
   }
 }
