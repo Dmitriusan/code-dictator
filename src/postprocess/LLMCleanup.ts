@@ -1,7 +1,7 @@
 import { LANGUAGES } from '../types';
 
 const OPENAI_CHAT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
-const DEFAULT_MODEL = 'gpt-4.1-nano';
+const DEFAULT_MODEL = 'gpt-4.1-mini';
 
 /** Unicode script ranges for output language validation. */
 const SCRIPT_RANGES: Record<string, RegExp> = {

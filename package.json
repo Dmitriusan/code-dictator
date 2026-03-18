@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cursor, or any AI chat. Zero dependencies, 37 languages.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -369,7 +369,7 @@
           "codeDictator.textProcessing.aiModel": {
             "order": 4,
             "type": "string",
-            "default": "gpt-4.1-nano",
+            "default": "gpt-4.1-mini",
             "enum": [
               "gpt-4.1-nano",
               "gpt-4.1-mini",
