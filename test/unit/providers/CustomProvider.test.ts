@@ -180,7 +180,7 @@ describe('CustomProvider', () => {
       expect(bodyStr).toContain('en');
     });
 
-    it('throws with error message on API error', async () => {
+    it('throws user-friendly message on 503 (service unavailable)', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 503,
@@ -192,7 +192,51 @@ describe('CustomProvider', () => {
       const audio = Buffer.from('fake-audio');
 
       await expect(provider.transcribe(audio, {})).rejects.toThrow(
-        'Custom API error (503): Service unavailable'
+        'Custom API service is temporarily unavailable'
+      );
+    });
+
+    it('throws user-friendly message on 401 (auth error)', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => 'Unauthorized',
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new CustomProvider('http://localhost:8000/api');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'Custom API rejected the request'
+      );
+    });
+
+    it('throws user-friendly message on 429 (rate limit)', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => 'Too Many Requests',
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new CustomProvider('http://localhost:8000/api');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'Custom API rate limit reached'
+      );
+    });
+
+    it('throws user-friendly message on network error', async () => {
+      const mockFetch = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+      globalThis.fetch = mockFetch;
+
+      const provider = new CustomProvider('http://localhost:8000/api');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'Unable to reach custom API at http://localhost:8000/api'
       );
     });
 

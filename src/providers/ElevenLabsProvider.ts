@@ -60,19 +60,26 @@ export class ElevenLabsProvider implements STTProvider {
 
     const body = Buffer.concat(parts);
 
-    const response = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'xi-api-key': apiKey,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body,
-      signal: options.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        },
+        body,
+        signal: options.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      throw new Error('Unable to reach ElevenLabs — check your internet connection and try again');
+    }
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      throw new Error(`ElevenLabs API error (${response.status}): ${errorText}`);
+      throw new Error(await ElevenLabsProvider.formatHttpError(response));
     }
 
     const data = await response.json() as {
@@ -107,6 +114,32 @@ export class ElevenLabsProvider implements STTProvider {
 
   estimateCost(durationMs: number): number {
     return (durationMs / 1000) * COST_PER_SECOND;
+  }
+
+  private static async formatHttpError(response: Response): string {
+    const body = await response.text().catch(() => '');
+    let detail = '';
+    try {
+      const json = JSON.parse(body);
+      detail = json?.detail?.message || (typeof json?.detail === 'string' ? json.detail : '') || json?.error?.message || '';
+    } catch {
+      detail = body.slice(0, 200);
+    }
+
+    switch (response.status) {
+      case 401:
+        return 'ElevenLabs API key is invalid or expired. Use "Code Dictator: Set API Key" to update it.';
+      case 402:
+        return 'ElevenLabs account has insufficient credits. Top up your balance at elevenlabs.io/billing.';
+      case 429:
+        return 'ElevenLabs rate limit reached. Please wait a moment and try again.';
+      case 500:
+      case 502:
+      case 503:
+        return 'ElevenLabs service is temporarily unavailable. Please try again later.';
+      default:
+        return `ElevenLabs API error (${response.status})${detail ? ': ' + detail : ''}`;
+    }
   }
 
   async validateConfig(): Promise<boolean> {

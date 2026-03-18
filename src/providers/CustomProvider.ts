@@ -66,16 +66,36 @@ export class CustomProvider implements STTProvider {
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const response = await fetch(this.endpoint, {
-      method: 'POST',
-      headers,
-      body,
-      signal: options.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers,
+        body,
+        signal: options.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      throw new Error(`Unable to reach custom API at ${this.endpoint} — check the URL and your network connection`);
+    }
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      throw new Error(`Custom API error (${response.status}): ${errorText}`);
+      const errorText = await response.text().catch(() => '');
+      switch (response.status) {
+        case 401:
+        case 403:
+          throw new Error('Custom API rejected the request — check your API key and endpoint configuration.');
+        case 429:
+          throw new Error('Custom API rate limit reached. Please wait and try again.');
+        case 500:
+        case 502:
+        case 503:
+          throw new Error('Custom API service is temporarily unavailable. Please try again later.');
+        default:
+          throw new Error(`Custom API error (${response.status})${errorText ? ': ' + errorText.slice(0, 200) : ''}`);
+      }
     }
 
     const data = await response.json() as { text?: string };

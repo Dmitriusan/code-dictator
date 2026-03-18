@@ -79,7 +79,7 @@ describe('LLMCleanup.cleanup()', () => {
     await cleanup('test', 'sk-test-key');
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.model).toBe('gpt-4.1-nano');
+    expect(body.model).toBe('gpt-4.1-mini');
   });
 
   it('returns original text on API error (non-ok response)', async () => {

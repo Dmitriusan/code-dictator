@@ -195,11 +195,11 @@ describe('OpenAIProvider', () => {
       expect(result.cost).toBeCloseTo(0.003, 4);
     });
 
-    it('throws with error message on API error', async () => {
+    it('throws user-friendly message on 401 (invalid key)', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
-        status: 429,
-        text: async () => 'Rate limit exceeded',
+        status: 401,
+        text: async () => JSON.stringify({ error: { message: 'Invalid API key' } }),
       });
       globalThis.fetch = mockFetch;
 
@@ -207,7 +207,51 @@ describe('OpenAIProvider', () => {
       const audio = Buffer.from('fake-audio');
 
       await expect(provider.transcribe(audio, {})).rejects.toThrow(
-        'OpenAI API error (429): Rate limit exceeded'
+        'OpenAI API key is invalid or expired'
+      );
+    });
+
+    it('throws user-friendly message on 429 (rate limit / quota)', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => JSON.stringify({ error: { message: 'Rate limit exceeded' } }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'OpenAI rate limit or quota exceeded'
+      );
+    });
+
+    it('throws user-friendly message on 503 (service unavailable)', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => 'Service Unavailable',
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'OpenAI service is temporarily unavailable'
+      );
+    });
+
+    it('throws user-friendly message on network error', async () => {
+      const mockFetch = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'Unable to reach OpenAI'
       );
     });
 

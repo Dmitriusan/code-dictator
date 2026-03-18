@@ -70,19 +70,26 @@ export class OpenAIProvider implements STTProvider {
 
     const body = Buffer.concat(parts);
 
-    const response = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body,
-      signal: options.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        },
+        body,
+        signal: options.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      throw new Error('Unable to reach OpenAI — check your internet connection and try again');
+    }
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
+      throw new Error(await OpenAIProvider.formatHttpError(response));
     }
 
     const data = await response.json() as { text?: string; language?: string; duration?: number };
@@ -104,6 +111,30 @@ export class OpenAIProvider implements STTProvider {
 
   estimateCost(durationMs: number): number {
     return (durationMs / 1000) * COST_PER_SECOND;
+  }
+
+  private static async formatHttpError(response: Response): string {
+    const body = await response.text().catch(() => '');
+    let detail = '';
+    try {
+      const json = JSON.parse(body);
+      detail = json?.error?.message || '';
+    } catch {
+      detail = body.slice(0, 200);
+    }
+
+    switch (response.status) {
+      case 401:
+        return 'OpenAI API key is invalid or expired. Use "Code Dictator: Set API Key" to update it.';
+      case 429:
+        return `OpenAI rate limit or quota exceeded. Check your billing at platform.openai.com.${detail ? ' (' + detail + ')' : ''}`;
+      case 500:
+      case 502:
+      case 503:
+        return 'OpenAI service is temporarily unavailable. Please try again later.';
+      default:
+        return `OpenAI API error (${response.status})${detail ? ': ' + detail : ''}`;
+    }
   }
 
   async validateConfig(): Promise<boolean> {

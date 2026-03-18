@@ -152,7 +152,7 @@ describe('ElevenLabsProvider', () => {
       expect(bodyStr).not.toContain('language_code');
     });
 
-    it('throws with error message on API error', async () => {
+    it('throws user-friendly message on 401 (invalid key)', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 401,
@@ -164,11 +164,43 @@ describe('ElevenLabsProvider', () => {
       const audio = Buffer.from('fake-audio');
 
       await expect(provider.transcribe(audio, {})).rejects.toThrow(
-        'ElevenLabs API error (401): Unauthorized'
+        'ElevenLabs API key is invalid or expired'
       );
     });
 
-    it('handles error when response.text() fails', async () => {
+    it('throws user-friendly message on 402 (insufficient credits)', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 402,
+        text: async () => JSON.stringify({ detail: { message: 'Quota exceeded' } }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'ElevenLabs account has insufficient credits'
+      );
+    });
+
+    it('throws user-friendly message on 429 (rate limit)', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => 'Too Many Requests',
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'ElevenLabs rate limit reached'
+      );
+    });
+
+    it('throws user-friendly message on 500/503 (service unavailable)', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 500,
@@ -180,7 +212,35 @@ describe('ElevenLabsProvider', () => {
       const audio = Buffer.from('fake-audio');
 
       await expect(provider.transcribe(audio, {})).rejects.toThrow(
-        'ElevenLabs API error (500): Unknown error'
+        'ElevenLabs service is temporarily unavailable'
+      );
+    });
+
+    it('includes detail in error for unknown status codes', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 418,
+        text: async () => 'I am a teapot',
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'ElevenLabs API error (418): I am a teapot'
+      );
+    });
+
+    it('throws user-friendly message on network error', async () => {
+      const mockFetch = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+      globalThis.fetch = mockFetch;
+
+      const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'Unable to reach ElevenLabs'
       );
     });
 
