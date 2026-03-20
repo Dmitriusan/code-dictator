@@ -194,9 +194,29 @@ describe('LLMCleanup.cleanup()', () => {
     const systemPrompt = body.messages[0].content;
     const userMessage = body.messages[1].content;
     expect(systemPrompt).toContain('English');
-    expect(systemPrompt).toContain('MUST be in English');
-    // User message gets a language tag prefix
-    expect(userMessage).toBe('[English] test');
+    expect(systemPrompt).toContain('Ukrainian');
+    expect(systemPrompt).toContain('ALLOWED LANGUAGES');
+    // Detected language is NOT used to force a single language
+    expect(systemPrompt).not.toContain('MUST be in English. Do NOT');
+    // User message has no language tag prefix — just the text
+    expect(userMessage).toBe('test');
+  });
+
+  it('allows mixed-language output in prompt', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'cleaned' } }],
+      }),
+    });
+    globalThis.fetch = mockFetch;
+
+    await cleanup('test', 'sk-test-key', undefined, ['en', 'uk'], 'uk');
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const systemPrompt: string = body.messages[0].content;
+    expect(systemPrompt).toContain('mix them');
+    expect(systemPrompt).toContain('Preserve English technical terms');
   });
 
   it('puts language constraint before cleanup instructions', async () => {
@@ -212,33 +232,12 @@ describe('LLMCleanup.cleanup()', () => {
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     const systemPrompt: string = body.messages[0].content;
-    const langIndex = systemPrompt.indexOf('LANGUAGE:');
+    const langIndex = systemPrompt.indexOf('ALLOWED LANGUAGES:');
     const cleanupIndex = systemPrompt.indexOf('Clean up');
     expect(langIndex).toBeLessThan(cleanupIndex);
   });
 
-  it('includes preferred languages as alternatives alongside detected language', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        choices: [{ message: { content: 'cleaned' } }],
-      }),
-    });
-    globalThis.fetch = mockFetch;
-
-    await cleanup('test', 'sk-test-key', undefined, ['uk', 'de'], 'en');
-
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    const systemPrompt = body.messages[0].content;
-    // Should keep detected language as primary but list alternatives
-    expect(systemPrompt).toContain('English');
-    expect(systemPrompt).toContain('MUST be in English');
-    expect(systemPrompt).toContain('Allowed alternatives');
-    expect(systemPrompt).toContain('Ukrainian');
-    expect(systemPrompt).toContain('German');
-  });
-
-  it('falls back to preferred languages when no detected language', async () => {
+  it('includes all preferred languages plus English when no detected language', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -253,7 +252,6 @@ describe('LLMCleanup.cleanup()', () => {
     const systemPrompt = body.messages[0].content;
     expect(systemPrompt).toContain('English');
     expect(systemPrompt).toContain('Ukrainian');
-    // No language tag in user message without detected language
     expect(body.messages[1].content).toBe('test');
   });
 

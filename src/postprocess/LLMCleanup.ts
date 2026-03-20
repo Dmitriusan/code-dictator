@@ -52,30 +52,18 @@ function resolveLanguageName(code: string): string | undefined {
 }
 
 function buildSystemPrompt(detectedLanguage?: string, preferredLanguages?: string[]): string {
-  const detectedName = detectedLanguage ? resolveLanguageName(detectedLanguage) : undefined;
-
   // Keep the prompt short and direct — nano models lose focus on long instructions.
   const lines: string[] = [];
 
-  // Build the set of allowed languages: preferred + detected + English fallback
+  // Build allowed language list from preferred languages (ignore detected — it's often wrong
+  // for similar scripts like uk/ru, and we want to allow mixed-language output).
   const langCodes = new Set(preferredLanguages ?? []);
-  if (detectedLanguage) {
-    langCodes.add(detectedLanguage);
-  }
-  langCodes.add('en');
+  langCodes.add('en'); // Always allow English
   const langNames = [...langCodes]
     .map(code => resolveLanguageName(code))
     .filter(Boolean);
-
-  if (detectedName && langNames.length <= 2) {
-    // Only detected + English — keep it simple
-    lines.push(`LANGUAGE: ${detectedName}. Your output MUST be in ${detectedName}. Do NOT switch to any other language.`);
-  } else if (detectedName) {
-    // Detected language + preferred languages — keep detected as primary
-    // but allow preferred languages since STT may have misidentified short phrases
-    lines.push(`LANGUAGE: ${detectedName}. Your output MUST be in ${detectedName}. Allowed alternatives: ${langNames.join(', ')}. No other languages.`);
-  } else if (langNames.length > 0) {
-    lines.push(`LANGUAGE: Output MUST be in one of: ${langNames.join(', ')}. No other languages.`);
+  if (langNames.length > 0) {
+    lines.push(`ALLOWED LANGUAGES: ${langNames.join(', ')}. Output may use any of these languages or mix them. No other languages.`);
   }
 
   lines.push(
@@ -85,7 +73,8 @@ function buildSystemPrompt(detectedLanguage?: string, preferredLanguages?: strin
     '- Remove filler words (um, uh, like, you know)',
     '- Fix punctuation and capitalization',
     '- Do NOT rephrase or add words',
-    '- KEEP the SAME language — never translate',
+    '- KEEP the SAME language as the input — never translate',
+    '- Preserve English technical terms, abbreviations, and proper nouns even in non-English text',
     '',
     'Output ONLY the cleaned text.',
   );
@@ -93,11 +82,7 @@ function buildSystemPrompt(detectedLanguage?: string, preferredLanguages?: strin
   return lines.filter(l => l !== undefined).join('\n');
 }
 
-function buildUserMessage(text: string, detectedLanguage?: string): string {
-  const detectedName = detectedLanguage ? resolveLanguageName(detectedLanguage) : undefined;
-  if (detectedName) {
-    return `[${detectedName}] ${text}`;
-  }
+function buildUserMessage(text: string, _detectedLanguage?: string): string {
   return text;
 }
 
@@ -127,6 +112,7 @@ export async function cleanup(
   try {
     const systemPrompt = buildSystemPrompt(detectedLanguage, preferredLanguages);
     const userMessage = buildUserMessage(text, detectedLanguage);
+    logFn?.('LLMCleanup', `System prompt: ${systemPrompt}`);
     logFn?.('LLMCleanup', `Input: "${userMessage}" | model=${requestModel}, lang=${detectedLanguage ?? 'auto'}`);
 
     const response = await fetch(OPENAI_CHAT_ENDPOINT, {
