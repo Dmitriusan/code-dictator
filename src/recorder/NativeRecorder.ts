@@ -4,6 +4,13 @@ import * as path from 'path';
 import * as os from 'os';
 import { diagLog } from '../DiagnosticLog';
 
+export interface AudioDiagnostics {
+  /** Human-readable explanation of why audio capture failed */
+  reason: string;
+  /** Actionable fix suggestion for the user */
+  suggestion: string;
+}
+
 interface NativeTool {
   name: string;
   command: string;
@@ -16,12 +23,13 @@ interface NativeTool {
  */
 export class NativeRecorder {
   private process: ChildProcess | null = null;
+  private toolName: string | null = null;
   private tempFile: string | null = null;
   private _isRecording = false;
   private startTime = 0;
   private onUnexpectedExit: (() => void) | null = null;
   private onSilenceDetected: (() => void) | null = null;
-  private onNoAudioData: (() => void) | null = null;
+  private onNoAudioData: ((diagnostics: AudioDiagnostics) => void) | null = null;
   private stderrData = '';
   private stoppingGracefully = false;
   private writeStream: fs.WriteStream | null = null;
@@ -108,6 +116,7 @@ export class NativeRecorder {
     }
 
     this.silenceTimeout = silenceTimeout;
+    this.toolName = tool.name;
     this.tempFile = path.join(os.tmpdir(), `code-dictator-${Date.now()}.wav`);
 
     // When silence detection is needed, pipe stdout so we can analyze audio levels.
@@ -143,12 +152,20 @@ export class NativeRecorder {
       try {
         this.stderrData = '';
         let settled = false;
-        this.process = spawn(tool.command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        // When piping stdout for silence detection, we consume the stream in real-time.
+        // When writing to file (pw-record, no-silence modes), use 'ignore' to avoid
+        // pipe buffer deadlock on long recordings (OS pipe buffer is only 64KB).
+        const stdioOpt: ('ignore' | 'pipe')[] = useStdoutPipe
+          ? ['ignore', 'pipe', 'pipe']
+          : ['ignore', 'ignore', 'pipe'];
+        this.process = spawn(tool.command, args, { stdio: stdioOpt });
         diagLog('NativeRecorder', `Spawned ${tool.command} ${args.join(' ')}`);
 
-        // Capture stderr for diagnostics
+        // Capture stderr for diagnostics (capped to prevent unbounded growth)
         this.process.stderr?.on('data', (chunk: Buffer) => {
-          this.stderrData += chunk.toString();
+          if (this.stderrData.length < 10000) {
+            this.stderrData += chunk.toString();
+          }
         });
 
         // If piping stdout, write raw PCM to file and analyze for silence
@@ -175,8 +192,9 @@ export class NativeRecorder {
           // hijacked by phone), the process runs but stdout produces nothing.
           setTimeout(() => {
             if (this._isRecording && totalBytes === 0) {
-              diagLog('NativeRecorder', 'No audio data received after 2s — mic may be unavailable');
-              if (this.onNoAudioData) { this.onNoAudioData(); }
+              const diag = NativeRecorder.diagnosePulseAudioSource();
+              diagLog('NativeRecorder', `No audio data received after 2s — ${diag.reason}`);
+              if (this.onNoAudioData) { this.onNoAudioData(diag); }
             }
           }, 2000);
 
@@ -416,11 +434,16 @@ export class NativeRecorder {
         reject(err);
       });
 
-      // Graceful stop: on Unix, SIGTERM lets the process flush buffers and
-      // finalize the WAV file. On Windows, Node.js maps all signals to
-      // TerminateProcess() (immediate kill) — the WAV header fixup in
-      // handleClose() corrects any incomplete headers.
-      proc.kill('SIGTERM');
+      // Graceful stop signal depends on the tool:
+      // - sox/rec: SIGINT (Ctrl+C) is the standard stop signal that flushes
+      //   internal audio buffers and finalizes the WAV header. SIGTERM may
+      //   cause sox to skip buffer flush, losing the last seconds of audio.
+      // - parecord/arecord/pw-record: SIGTERM is fine since we handle the
+      //   WAV header ourselves (stdout-piped) or the header is already valid.
+      // On Windows, Node.js maps all signals to TerminateProcess() (immediate
+      // kill) — the WAV header fixup in handleClose() corrects incomplete headers.
+      const stopSignal = this.toolName === 'sox' ? 'SIGINT' : 'SIGTERM';
+      proc.kill(stopSignal);
 
       // Force kill after 5s if the process hasn't exited.
       // On Windows SIGTERM already killed the process, so this is a no-op.
@@ -453,7 +476,7 @@ export class NativeRecorder {
     this.onSilenceDetected = handler;
   }
 
-  setNoAudioDataHandler(handler: () => void): void {
+  setNoAudioDataHandler(handler: (diagnostics: AudioDiagnostics) => void): void {
     this.onNoAudioData = handler;
   }
 
@@ -462,8 +485,77 @@ export class NativeRecorder {
     return Date.now() - this.startTime;
   }
 
+  /**
+   * Query PipeWire/PulseAudio for the default source state.
+   * Returns a diagnostic with the reason and a user-actionable suggestion.
+   */
+  static diagnosePulseAudioSource(): AudioDiagnostics {
+    if (process.platform !== 'linux') {
+      return {
+        reason: 'No audio data from microphone',
+        suggestion: 'Check your microphone in OS sound settings.',
+      };
+    }
+
+    try {
+      // Get the default source name
+      const defaultSource = execSync('pactl get-default-source 2>/dev/null', {
+        timeout: 3000,
+        encoding: 'utf-8',
+      }).trim();
+
+      if (!defaultSource) {
+        return {
+          reason: 'No default audio source configured',
+          suggestion: 'Set a default microphone in your OS sound settings.',
+        };
+      }
+
+      // Check if it's a monitor (output loopback), not a real mic
+      if (defaultSource.includes('.monitor')) {
+        return {
+          reason: `Default source "${defaultSource}" is an output monitor, not a microphone`,
+          suggestion: 'Select an actual microphone as default input in your OS sound settings.',
+        };
+      }
+
+      // Query PipeWire node state — pw-cli info accepts node names directly
+      const nodeInfo = execSync(`pw-cli info '${defaultSource}' 2>/dev/null`, {
+        timeout: 3000,
+        encoding: 'utf-8',
+      });
+      const stateMatch = nodeInfo.match(/state:\s*"(\w+)"(?:\s*"([^"]*)")?/);
+      if (stateMatch) {
+        const state = stateMatch[1];
+        const stateDetail = stateMatch[2] || '';
+
+        if (state === 'error') {
+          return {
+            reason: `Audio source is in error state: "${stateDetail}"`,
+            suggestion: 'Restart your audio system: run "systemctl --user restart pipewire pipewire-pulse wireplumber" in a terminal.',
+          };
+        }
+        if (state === 'suspended') {
+          return {
+            reason: 'Audio source is suspended (device may be disconnected or powered off)',
+            suggestion: 'Check that your microphone is connected, or try switching to a different microphone in your OS sound settings.',
+          };
+        }
+        diagLog('NativeRecorder', `PipeWire source state: ${state} ${stateDetail}`);
+      }
+    } catch {
+      // pw-cli or pactl not available — fall through to generic message
+    }
+
+    return {
+      reason: 'Microphone is not producing audio',
+      suggestion: 'This commonly happens when a Bluetooth headset switches to another device. Try switching to a different microphone in your OS sound settings.',
+    };
+  }
+
   private cleanup(): void {
     this.process = null;
+    this.toolName = null;
     this.tempFile = null;
     this._isRecording = false;
     this.startTime = 0;

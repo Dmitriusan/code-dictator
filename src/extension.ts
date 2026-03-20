@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import { StorageService } from './storage/StorageService';
 import { StatusBar } from './ui/StatusBar';
 import { RecorderManager } from './recorder/RecorderManager';
+import type { AudioDiagnostics } from './recorder/NativeRecorder';
+import { isAudioSilent } from './recorder/AudioAnalysis';
 import { UsageTracker } from './tracking/UsageTracker';
 import { HistoryManager } from './tracking/History';
 import { TextInjector } from './injection/TextInjector';
@@ -93,10 +95,21 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Reset UI when recording is cancelled internally (e.g. no-audio auto-cancel)
   context.subscriptions.push(
-    recorder.onTrackEnded(() => {
+    recorder.onRecordingStopped(() => {
+      statusBar.updateState('idle');
+      vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+    }),
+  );
+
+  context.subscriptions.push(
+    recorder.onTrackEnded((diagnostics?: AudioDiagnostics) => {
+      const reason = diagnostics?.reason ?? 'No audio from microphone';
+      const suggestion = diagnostics?.suggestion
+        ?? 'This commonly happens when a Bluetooth headset switches to another device. Try switching to a different microphone in your OS sound settings.';
       vscode.window.showWarningMessage(
-        'Code Dictator: No audio from microphone. This commonly happens when a Bluetooth headset switches to another device. Try switching to a different microphone in your OS sound settings.',
+        `Code Dictator: ${reason}. ${suggestion}`,
       );
     }),
   );
@@ -321,6 +334,18 @@ async function handleStopAndTranscribe(): Promise<void> {
       statusBar.updateState('idle');
       diagLog('Extension', `Audio too short (${audioPayload.buffer.length} bytes), skipping transcription`);
       statusBar.showTransientMessage('$(warning) Recording too short', 2000);
+      return;
+    }
+
+    // Guard against silence-filled recordings (e.g. PipeWire lost hardware,
+    // default source is auto_null.monitor, mic producing zero samples).
+    // Whisper hallucinates on silence, so skip transcription entirely.
+    if (isAudioSilent(audioPayload.buffer)) {
+      statusBar.updateState('idle');
+      diagLog('Extension', 'Audio is silent (all zeros / near-zero), skipping transcription');
+      vscode.window.showWarningMessage(
+        'Code Dictator: Microphone is producing silence. Your audio device may have disconnected. Check your OS sound settings or restart your audio system.',
+      );
       return;
     }
 

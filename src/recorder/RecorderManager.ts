@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import type { AudioIsolation, MessageFromWebview, MessageToWebview } from '../types';
 import { getRecorderWebviewContent } from './RecorderWebviewContent';
-import { NativeRecorder } from './NativeRecorder';
+import { NativeRecorder, type AudioDiagnostics } from './NativeRecorder';
 import { diagLog } from '../DiagnosticLog';
 
 type RecorderEvent = 'recordingStarted' | 'recordingStopped' | 'audioData' | 'error' | 'silenceDetected' | 'trackEnded';
@@ -59,7 +59,7 @@ export class RecorderManager implements vscode.Disposable {
     return this.addListener('silenceDetected', handler);
   }
 
-  onTrackEnded(handler: () => void): vscode.Disposable {
+  onTrackEnded(handler: (diagnostics?: AudioDiagnostics) => void): vscode.Disposable {
     return this.addListener('trackEnded', handler);
   }
 
@@ -145,9 +145,22 @@ export class RecorderManager implements vscode.Disposable {
       });
     }
 
-    // Warn early if mic isn't producing any audio data
-    this.nativeRecorder.setNoAudioDataHandler(() => {
-      this.emit('trackEnded');
+    // Warn early if mic isn't producing any audio data, then auto-cancel
+    // after 2 more seconds. We cancel (SIGKILL) rather than stop+transcribe
+    // because parecord connected to an errored PipeWire stream can hang on
+    // SIGTERM, and there's nothing to transcribe anyway.
+    this.nativeRecorder.setNoAudioDataHandler((diagnostics) => {
+      this.emit('trackEnded', diagnostics);
+      setTimeout(() => {
+        if (this._isRecording && this.nativeRecorder) {
+          diagLog('RecorderManager', 'Auto-cancelling recording — no audio data after 4s');
+          this.clearMaxDurationTimeout();
+          this.nativeRecorder.cancel();
+          this.nativeRecorder = null;
+          this._isRecording = false;
+          this.emit('recordingStopped');
+        }
+      }, 2000);
     });
 
     await this.nativeRecorder.start(silenceTimeout);
