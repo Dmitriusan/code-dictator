@@ -233,8 +233,8 @@ describe('LLMCleanup.cleanup()', () => {
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     const systemPrompt: string = body.messages[0].content;
     const langIndex = systemPrompt.indexOf('ALLOWED LANGUAGES:');
-    const cleanupIndex = systemPrompt.indexOf('Clean up');
-    expect(langIndex).toBeLessThan(cleanupIndex);
+    const rulesIndex = systemPrompt.indexOf('Rules:');
+    expect(langIndex).toBeLessThan(rulesIndex);
   });
 
   it('includes all preferred languages plus English when no detected language', async () => {
