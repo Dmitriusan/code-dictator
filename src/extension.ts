@@ -12,7 +12,7 @@ import { createProvider } from './providers/ProviderFactory';
 import { format } from './postprocess/Formatter';
 import { removeFillerWords } from './postprocess/FillerWords';
 import { applyCodeAware } from './postprocess/CodeAware';
-import { cleanup as llmCleanup } from './postprocess/LLMCleanup';
+import { cleanup as llmCleanup, setCleanupLogger } from './postprocess/LLMCleanup';
 import { showLanguagePicker, showLanguageConfigurator } from './ui/LanguagePicker';
 import { runSetupWizard } from './ui/SetupWizard';
 import { HoldModeController } from './recorder/HoldModeController';
@@ -48,6 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Migrate settings from old key names (v1.x → v2.x) before reading anything
   storageService.migrateSettings().catch(() => { /* best-effort */ });
   configureDiagnosticLog(storageService.getSettings().diagnosticLogging);
+  setCleanupLogger(diagLog);
   statusBar = new StatusBar();
   recorder = new RecorderManager(context.extensionUri);
   usageTracker = new UsageTracker(storageService);

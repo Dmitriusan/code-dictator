@@ -197,6 +197,9 @@ Voice input requires a local VS Code window. Remote environments don't expose mi
 - Test your microphone in another app first
 - Verify your API key: run `Code Dictator: Set API Key` from the Command Palette
 
+**Short phrases transcribed in the wrong language?**
+Speech-to-text models use context to identify the language. Longer utterances give the model more signal, so full sentences ("Refactor the auth middleware to use JWT tokens and add rate limiting") are transcribed accurately almost every time. Shorter phrases — around five words or fewer — may not contain enough context for reliable language detection. If you frequently dictate short commands, try setting a specific language in settings instead of relying on auto-detect. Alternatively, configure your **Preferred Languages** list — when AI text cleanup is enabled, it uses this list as a language hint to avoid unwanted language switches.
+
 ---
 
 ## Privacy

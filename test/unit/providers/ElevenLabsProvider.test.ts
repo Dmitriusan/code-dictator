@@ -168,6 +168,27 @@ describe('ElevenLabsProvider', () => {
       );
     });
 
+    it('throws quota exceeded message on 401 with quota_exceeded detail', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({
+          detail: {
+            status: 'quota_exceeded',
+            message: 'This request exceeds your quota of 10000. You have 12 credits remaining, while 129 credits are required for this request.',
+          },
+        }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new ElevenLabsProvider(async () => 'valid-key-12345678');
+      const audio = Buffer.from('fake-audio');
+
+      await expect(provider.transcribe(audio, {})).rejects.toThrow(
+        'ElevenLabs quota exceeded'
+      );
+    });
+
     it('throws user-friendly message on 402 (insufficient credits)', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,

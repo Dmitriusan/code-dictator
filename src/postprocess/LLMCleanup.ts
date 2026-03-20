@@ -3,6 +3,14 @@ import { LANGUAGES } from '../types';
 const OPENAI_CHAT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-4.1-mini';
 
+// Optional diagnostic logger injected by the extension at startup.
+// Keeps this module free of vscode imports so it stays unit-testable.
+let logFn: ((source: string, message: string) => void) | undefined;
+
+export function setCleanupLogger(fn: (source: string, message: string) => void): void {
+  logFn = fn;
+}
+
 /** Unicode script ranges for output language validation. */
 const SCRIPT_RANGES: Record<string, RegExp> = {
   uk: /[\u0400-\u04FF]/,   // Cyrillic
@@ -49,18 +57,25 @@ function buildSystemPrompt(detectedLanguage?: string, preferredLanguages?: strin
   // Keep the prompt short and direct — nano models lose focus on long instructions.
   const lines: string[] = [];
 
-  if (detectedName) {
+  // Build the set of allowed languages: preferred + detected + English fallback
+  const langCodes = new Set(preferredLanguages ?? []);
+  if (detectedLanguage) {
+    langCodes.add(detectedLanguage);
+  }
+  langCodes.add('en');
+  const langNames = [...langCodes]
+    .map(code => resolveLanguageName(code))
+    .filter(Boolean);
+
+  if (detectedName && langNames.length <= 2) {
+    // Only detected + English — keep it simple
     lines.push(`LANGUAGE: ${detectedName}. Your output MUST be in ${detectedName}. Do NOT switch to any other language.`);
-  } else {
-    // Resolve allowed languages for the constraint
-    const langCodes = new Set(preferredLanguages ?? []);
-    langCodes.add('en');
-    const langNames = [...langCodes]
-      .map(code => resolveLanguageName(code))
-      .filter(Boolean);
-    if (langNames.length > 0) {
-      lines.push(`LANGUAGE: Output MUST be in one of: ${langNames.join(', ')}. No other languages.`);
-    }
+  } else if (detectedName) {
+    // Detected language + preferred languages — keep detected as primary
+    // but allow preferred languages since STT may have misidentified short phrases
+    lines.push(`LANGUAGE: ${detectedName}. Your output MUST be in ${detectedName}. Allowed alternatives: ${langNames.join(', ')}. No other languages.`);
+  } else if (langNames.length > 0) {
+    lines.push(`LANGUAGE: Output MUST be in one of: ${langNames.join(', ')}. No other languages.`);
   }
 
   lines.push(
@@ -110,6 +125,10 @@ export async function cleanup(
   const requestModel = model || DEFAULT_MODEL;
 
   try {
+    const systemPrompt = buildSystemPrompt(detectedLanguage, preferredLanguages);
+    const userMessage = buildUserMessage(text, detectedLanguage);
+    logFn?.('LLMCleanup', `Input: "${userMessage}" | model=${requestModel}, lang=${detectedLanguage ?? 'auto'}`);
+
     const response = await fetch(OPENAI_CHAT_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -119,8 +138,8 @@ export async function cleanup(
       body: JSON.stringify({
         model: requestModel,
         messages: [
-          { role: 'system', content: buildSystemPrompt(detectedLanguage, preferredLanguages) },
-          { role: 'user', content: buildUserMessage(text, detectedLanguage) },
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
         ],
         temperature: 0,
         max_tokens: Math.max(text.length * 2, 256),
@@ -143,12 +162,16 @@ export async function cleanup(
 
     const cleaned = data.choices?.[0]?.message?.content?.trim();
     if (!cleaned) {
+      logFn?.('LLMCleanup', 'Output: empty response from LLM');
       return text;
     }
+
+    logFn?.('LLMCleanup', `Output: "${cleaned}"`);
 
     // Safety net: if the model switched scripts (e.g. Cyrillic → Latin),
     // discard the cleanup and return the original text.
     if (hasScriptMismatch(text, cleaned, detectedLanguage)) {
+      logFn?.('LLMCleanup', 'Script mismatch detected, discarding result');
       console.warn('Code Dictator: LLM cleanup changed script, discarding result');
       return text;
     }

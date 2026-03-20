@@ -119,15 +119,20 @@ export class ElevenLabsProvider implements STTProvider {
   private static async formatHttpError(response: Response): string {
     const body = await response.text().catch(() => '');
     let detail = '';
+    let detailStatus = '';
     try {
       const json = JSON.parse(body);
       detail = json?.detail?.message || (typeof json?.detail === 'string' ? json.detail : '') || json?.error?.message || '';
+      detailStatus = json?.detail?.status || '';
     } catch {
       detail = body.slice(0, 200);
     }
 
     switch (response.status) {
       case 401:
+        if (detailStatus === 'quota_exceeded') {
+          return `ElevenLabs quota exceeded.${detail ? ' ' + detail : ''} Top up your balance at elevenlabs.io/billing.`;
+        }
         return 'ElevenLabs API key is invalid or expired. Use "Code Dictator: Set API Key" to update it.';
       case 402:
         return 'ElevenLabs account has insufficient credits. Top up your balance at elevenlabs.io/billing.';

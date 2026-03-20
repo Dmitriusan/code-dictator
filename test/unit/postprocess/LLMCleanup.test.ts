@@ -217,6 +217,27 @@ describe('LLMCleanup.cleanup()', () => {
     expect(langIndex).toBeLessThan(cleanupIndex);
   });
 
+  it('includes preferred languages as alternatives alongside detected language', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'cleaned' } }],
+      }),
+    });
+    globalThis.fetch = mockFetch;
+
+    await cleanup('test', 'sk-test-key', undefined, ['uk', 'de'], 'en');
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const systemPrompt = body.messages[0].content;
+    // Should keep detected language as primary but list alternatives
+    expect(systemPrompt).toContain('English');
+    expect(systemPrompt).toContain('MUST be in English');
+    expect(systemPrompt).toContain('Allowed alternatives');
+    expect(systemPrompt).toContain('Ukrainian');
+    expect(systemPrompt).toContain('German');
+  });
+
   it('falls back to preferred languages when no detected language', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
