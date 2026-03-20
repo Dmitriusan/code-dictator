@@ -519,8 +519,11 @@ export class NativeRecorder {
         };
       }
 
-      // Query PipeWire node state — pw-cli info accepts node names directly
-      const nodeInfo = execSync(`pw-cli info '${defaultSource}' 2>/dev/null`, {
+      // Query PipeWire node state — pw-cli info accepts node names directly.
+      // Sanitise the source name to prevent shell injection (source names are
+      // system-controlled, but defence-in-depth).
+      const safeName = defaultSource.replace(/[^a-zA-Z0-9._:\-]/g, '_');
+      const nodeInfo = execSync(`pw-cli info '${safeName}' 2>/dev/null`, {
         timeout: 3000,
         encoding: 'utf-8',
       });

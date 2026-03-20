@@ -99,11 +99,14 @@ export class RecorderManager implements vscode.Disposable {
         this.panel!.webview.postMessage(message);
         // _isRecording already set above — no duplicate needed
 
-        // Give the webview 2s to fail or succeed
+        // Give the webview time to fail or succeed.
+        // getUserMedia can take several seconds when the OS shows a
+        // permission dialog, so use a generous 5 s window before assuming
+        // the webview is working and clearing the error handler.
         setTimeout(() => {
           this.permissionErrorHandler = undefined;
           resolve();
-        }, 2000);
+        }, 5000);
       });
     } catch (webviewError) {
       // Webview recording failed — try native fallback (arecord/sox)
@@ -231,8 +234,8 @@ export class RecorderManager implements vscode.Disposable {
         this.audioDataResolve = undefined;
         this.audioDataReject = undefined;
         this._isRecording = false;
-        reject(new Error('Recording stop timed out after 30 seconds'));
-      }, 30000);
+        reject(new Error('Recording stop timed out after 10 seconds'));
+      }, 10000);
 
       const originalResolve = this.audioDataResolve;
       this.audioDataResolve = (payload) => {
@@ -265,18 +268,20 @@ export class RecorderManager implements vscode.Disposable {
       return;
     }
 
-    if (!this._isRecording || !this.panel) {
-      return;
-    }
-
-    this._isRecording = false;
-
-    // Reject any pending promise
+    // Always reject a pending stopRecording() promise so the user isn't stuck
+    // waiting for the timeout. stopRecording() sets _isRecording = false before
+    // creating the promise, so we must check audioDataReject independently.
     if (this.audioDataReject) {
       this.audioDataReject(new Error('Recording cancelled'));
       this.audioDataResolve = undefined;
       this.audioDataReject = undefined;
     }
+
+    if (!this._isRecording || !this.panel) {
+      return;
+    }
+
+    this._isRecording = false;
 
     const message: MessageToWebview = { type: 'cancelRecording' };
     this.panel.webview.postMessage(message);
@@ -353,6 +358,13 @@ export class RecorderManager implements vscode.Disposable {
         this.panel = undefined;
       }
     }
+
+    // Dispose stale panel-scoped listeners from a previous panel so they
+    // don't accumulate across panel recreations.
+    for (const d of this.disposables) {
+      d.dispose();
+    }
+    this.disposables = [];
 
     const nonce = crypto.randomBytes(16).toString('hex');
 
