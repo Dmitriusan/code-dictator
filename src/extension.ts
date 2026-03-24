@@ -18,6 +18,7 @@ import { runSetupWizard } from './ui/SetupWizard';
 import { HoldModeController } from './recorder/HoldModeController';
 import { configureDiagnosticLog, diagLog, disposeDiagnosticLog } from './DiagnosticLog';
 import { playCompletionChime } from './ui/SoundPlayer';
+import { isHallucination, isSuspiciouslyShort } from './postprocess/HallucinationFilter';
 import type { TranscriptionResult } from './types';
 
 let storageService: StorageService;
@@ -350,12 +351,17 @@ async function handleStopAndTranscribe(): Promise<void> {
       return;
     }
 
+    // Build Whisper prompt hint to reduce hallucinations.
+    const whisperPrompt = buildWhisperPrompt();
+
     // Transcribe
     const provider = createProvider(settings, (p) => storageService.getApiKey(p));
+    diagLog('STT', `Calling ${provider.name} (${provider.id}), language: ${settings.language || 'auto'}, mimeType: ${audioPayload.mimeType}, audioSize: ${audioPayload.buffer.length} bytes${whisperPrompt ? ', prompt hint: yes' : ''}`);
     let result: TranscriptionResult;
     try {
       result = await provider.transcribe(audioPayload.buffer, {
         language: settings.language || undefined,
+        prompt: whisperPrompt,
         mimeType: audioPayload.mimeType,
         signal: abort.signal,
       });
@@ -365,11 +371,23 @@ async function handleStopAndTranscribe(): Promise<void> {
       vscode.window.showErrorMessage(`Code Dictator: Transcription failed — ${message}`);
       return;
     }
+    diagLog('STT', `Result: "${result.text}", language=${result.language ?? 'n/a'}, duration=${result.duration ?? 'n/a'}s, cost=${result.cost ?? 'n/a'}`);
 
-    if (!result.text.trim()) {
+    if (!result.text.trim() || isHallucination(result.text)) {
       statusBar.updateState('idle');
+      if (result.text.trim()) {
+        diagLog('STT', `Hallucination filtered: "${result.text}"`);
+      }
       statusBar.showTransientMessage('$(warning) No speech detected', 2000);
       return;
+    }
+
+    // Warn if transcription is suspiciously short relative to recording duration
+    if (isSuspiciouslyShort(result.text, audioPayload.durationMs)) {
+      diagLog('STT', `Suspiciously short transcription: ${result.text.split(/\s+/).length} words for ${Math.round(audioPayload.durationMs / 1000)}s recording`);
+      vscode.window.showWarningMessage(
+        `Code Dictator: Transcription may be inaccurate — got only ${result.text.split(/\s+/).length} words from a ${Math.round(audioPayload.durationMs / 1000)}s recording. The audio may have been unclear.`,
+      );
     }
 
     // Post-processing pipeline
@@ -455,6 +473,18 @@ async function handleStopAndTranscribe(): Promise<void> {
     pipelineAbort = null;
     vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', false);
   }
+}
+
+/**
+ * Build a prompt hint for Whisper to reduce hallucinations.
+ * Avoids mentioning specific non-English languages — that biases Whisper
+ * toward detecting/translating into those languages even when user speaks English.
+ */
+function buildWhisperPrompt(): string {
+  // Whisper's prompt parameter works best as example-style text.
+  // Providing coding vocabulary context reduces hallucinations like
+  // phantom subtitle attributions ("Субтитры подготовил DimaTorzok").
+  return 'Software development discussion. Technical terms, API names, function names, and code-related vocabulary.';
 }
 
 async function handleTranscribeFile(): Promise<void> {
