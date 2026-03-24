@@ -138,6 +138,39 @@ describe('OpenAIProvider', () => {
       expect(bodyStr).not.toContain('name="language"');
     });
 
+    it('includes prompt when specified', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'hello' }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key');
+      await provider.transcribe(Buffer.from('audio'), {
+        prompt: 'Transcription of a software developer speaking English and Ukrainian.',
+      });
+
+      const bodyBuffer = mockFetch.mock.calls[0][1].body as Buffer;
+      const bodyStr = bodyBuffer.toString();
+      expect(bodyStr).toContain('name="prompt"');
+      expect(bodyStr).toContain('software developer');
+    });
+
+    it('does not include prompt when not specified', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'hello' }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key');
+      await provider.transcribe(Buffer.from('audio'), {});
+
+      const bodyBuffer = mockFetch.mock.calls[0][1].body as Buffer;
+      const bodyStr = bodyBuffer.toString();
+      expect(bodyStr).not.toContain('name="prompt"');
+    });
+
     it('includes whisper-1 model in request', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,

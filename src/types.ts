@@ -1,6 +1,7 @@
 // STT Provider types
 export interface TranscribeOptions {
   language?: string;
+  prompt?: string;
   format?: string;
   mimeType?: string;
   signal?: AbortSignal;

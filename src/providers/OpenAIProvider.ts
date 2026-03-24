@@ -66,6 +66,15 @@ export class OpenAIProvider implements STTProvider {
       ));
     }
 
+    // prompt field (optional) — guides Whisper toward expected vocabulary/style
+    if (options.prompt) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="prompt"\r\n\r\n` +
+        `${options.prompt}\r\n`
+      ));
+    }
+
     parts.push(Buffer.from(`--${boundary}--\r\n`));
 
     const body = Buffer.concat(parts);
