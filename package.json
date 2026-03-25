@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cursor, or any AI chat. Zero dependencies, 37 languages.",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -578,7 +578,7 @@
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.27.4",
     "eslint": "^10.0.3",
-    "typescript": "^5.5.0",
+    "typescript": "^6.0.0",
     "vitest": "^4.1.0",
     "@typescript-eslint/eslint-plugin": "^8.57.1",
     "@typescript-eslint/parser": "^8.0.0"
