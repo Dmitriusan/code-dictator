@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cursor, or any AI chat. Zero dependencies, 37 languages.",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -253,7 +253,7 @@
               "Tamil",
               "Bengali"
             ],
-            "description": "Transcription language. Leave as Auto-detect for automatic language detection."
+            "markdownDescription": "Transcription language. Leave as Auto-detect for automatic language detection.\n\n**Tip:** If your transcriptions come back in the wrong language (e.g., you speak English but get Polish text), set this to your spoken language explicitly. Auto-detect can misidentify languages, especially for multilingual speakers. Use `Code Dictator: Select Language` to quick-switch between languages."
           },
           "codeDictator.preferredLanguages": {
             "order": 5,
