@@ -97,6 +97,13 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Transition from "initializing" to "recording" when audio capture actually starts
+  context.subscriptions.push(
+    recorder.onRecordingStarted(() => {
+      statusBar.updateState('recording');
+    }),
+  );
+
   // Reset UI when recording is cancelled internally (e.g. no-audio auto-cancel)
   context.subscriptions.push(
     recorder.onRecordingStopped(() => {
@@ -297,15 +304,17 @@ async function handleStartRecording(): Promise<void> {
 
   try {
     diagLog('Extension', `Starting recording: provider=${settings.provider}, isolation=${settings.audioIsolation}, maxDuration=${settings.maxRecordingDuration}s`);
+    // Show initializing state immediately so the user gets visual feedback
+    // while the webview/native recorder spins up (getUserMedia, etc.)
+    statusBar.updateState('initializing');
+    vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', true);
     await recorder.startRecording(
       settings.audioIsolation,
       settings.silenceTimeout,
       settings.maxRecordingDuration,
     );
-    // Show recording indicator AFTER recorder is ready — so the user
-    // sees the red mic icon only when audio is actually being captured
-    statusBar.updateState('recording');
-    vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', true);
+    // The actual "recording" state (with timer) is set by the
+    // onRecordingStarted event handler when audio capture begins.
   } catch (error) {
     statusBar.updateState('idle');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);

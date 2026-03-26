@@ -169,6 +169,7 @@ export class RecorderManager implements vscode.Disposable {
     await this.nativeRecorder.start(silenceTimeout);
     this._isRecording = true;
     diagLog('RecorderManager', `Started native recording, silenceTimeout=${silenceTimeout}s`);
+    this.emit('recordingStarted');
 
     // Max duration enforcement — clear any stale timeout first
     this.clearMaxDurationTimeout();

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-export type StatusBarState = 'idle' | 'recording' | 'transcribing' | 'cleaning';
+export type StatusBarState = 'idle' | 'initializing' | 'recording' | 'transcribing' | 'cleaning';
 
 export class StatusBar implements vscode.Disposable {
   private readonly micButton: vscode.StatusBarItem;
@@ -55,6 +55,14 @@ export class StatusBar implements vscode.Disposable {
         this.micButton.tooltip = 'Code Dictator: Click to start recording (Alt+D)';
         this.micButton.backgroundColor = undefined;
         this.micButton.color = undefined;
+        this.micButton.show();
+        break;
+
+      case 'initializing':
+        this.stopRecordingTimer();
+        this.micButton.text = '$(loading~spin) Starting...';
+        this.micButton.tooltip = 'Code Dictator: Initializing microphone...';
+        this.micButton.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         this.micButton.show();
         break;
 
