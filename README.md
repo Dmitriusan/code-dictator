@@ -1,5 +1,6 @@
 # Code Dictator
 
+![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-forestgreen)
 [![VS Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/irrationalways.code-dictator)](https://marketplace.visualstudio.com/items?itemName=irrationalways.code-dictator)
 [![CI](https://github.com/Dmitriusan/code-dictator/actions/workflows/ci.yml/badge.svg)](https://github.com/Dmitriusan/code-dictator/actions/workflows/ci.yml)
 [![GitHub stars](https://img.shields.io/github/stars/Dmitriusan/code-dictator)](https://github.com/Dmitriusan/code-dictator)

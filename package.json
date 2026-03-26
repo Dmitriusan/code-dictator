@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cursor, or any AI chat. Zero dependencies, 37 languages.",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -39,6 +39,13 @@
     "url": "https://github.com/Dmitriusan/code-dictator/issues"
   },
   "homepage": "https://irrationalways.com",
+  "badges": [
+    {
+      "url": "https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-forestgreen",
+      "href": "https://marketplace.visualstudio.com/items?itemName=irrationalways.code-dictator",
+      "description": "Supported platforms: macOS, Linux, Windows"
+    }
+  ],
   "sponsor": {
     "url": "https://buymeacoffee.com/dmitriusan"
   },
