@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cursor, or any AI chat. Zero dependencies, 37 languages.",
-  "version": "1.1.9",
+  "version": "1.1.10",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -253,7 +253,7 @@
               "Tamil",
               "Bengali"
             ],
-            "markdownDescription": "Transcription language. Leave as Auto-detect for automatic language detection.\n\n**Tip:** If your transcriptions come back in the wrong language (e.g., you speak English but get Polish text), set this to your spoken language explicitly. Auto-detect can misidentify languages, especially for multilingual speakers. Use `Code Dictator: Select Language` to quick-switch between languages."
+            "markdownDescription": "Transcription language. Leave as Auto-detect for automatic language detection.\n\n_**Tip:** If your transcriptions come back in the wrong language (e.g., you speak English but get Polish text), set this to your spoken language explicitly. Auto-detect can misidentify languages, especially for multilingual speakers. Use `Code Dictator: Select Language` to quick-switch between languages._"
           },
           "codeDictator.preferredLanguages": {
             "order": 5,
@@ -567,6 +567,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "tsc -p tsconfig.e2e.json && node dist-test/runTests.js",
+    "prepackage": "rm -f *.vsix",
     "package": "npm run build && vsce package",
     "prepublish": "npm run build",
     "vscode:prepublish": "npm run build"
