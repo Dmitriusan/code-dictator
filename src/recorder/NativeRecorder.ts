@@ -1,4 +1,4 @@
-import { spawn, execSync, type ChildProcess } from 'child_process';
+import { spawn, execSync, spawnSync, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -70,6 +70,15 @@ export class NativeRecorder {
       } catch { /* not found */ }
     }
 
+    // Windows: prefer ffmpeg over sox — sox on Windows lacks a working
+    // audio device driver, while ffmpeg uses DirectShow which works reliably.
+    if (platform === 'win32') {
+      const ffmpegPath = findExecutableWindows('ffmpeg');
+      if (ffmpegPath) {
+        return { name: 'ffmpeg', command: ffmpegPath };
+      }
+    }
+
     // sox/rec (cross-platform)
     if (platform === 'darwin') {
       // macOS: check Homebrew paths directly (VS Code doesn't inherit shell PATH)
@@ -85,7 +94,16 @@ export class NativeRecorder {
       }
     }
 
-    // Fallback: check PATH
+    // ffmpeg (cross-platform fallback, checked before sox since it's more reliable)
+    if (platform !== 'win32') {
+      const whichCmd = platform === 'win32' ? 'where' : 'which';
+      try {
+        execSync(`${whichCmd} ffmpeg`, { stdio: 'ignore' });
+        return { name: 'ffmpeg', command: 'ffmpeg' };
+      } catch { /* not found */ }
+    }
+
+    // Fallback: check PATH for sox/rec
     const recCmd = platform === 'win32' ? 'sox' : 'rec';
     const which = platform === 'win32' ? 'where' : 'which';
     try {
@@ -112,7 +130,7 @@ export class NativeRecorder {
 
     const tool = NativeRecorder.detectTool();
     if (!tool) {
-      throw new Error('No native recording tool found (arecord or sox)');
+      throw new Error('No native recording tool found (ffmpeg, arecord, or sox). On Windows, install ffmpeg: winget install Gyan.FFmpeg');
     }
 
     this.silenceTimeout = silenceTimeout;
@@ -120,11 +138,22 @@ export class NativeRecorder {
     this.tempFile = path.join(os.tmpdir(), `code-dictator-${Date.now()}.wav`);
 
     // When silence detection is needed, pipe stdout so we can analyze audio levels.
-    // pw-record does NOT support stdout piping, so it always writes to file.
+    // pw-record and ffmpeg do NOT support stdout piping for silence detection.
     const useStdoutPipe = silenceTimeout > 0 && (tool.name === 'arecord' || tool.name === 'parecord');
 
     let args: string[];
-    if (tool.name === 'pw-record') {
+    if (tool.name === 'ffmpeg') {
+      // ffmpeg: uses DirectShow on Windows, default device on macOS/Linux.
+      // Writes WAV to file (no stdout pipe — ffmpeg writes headers at end).
+      const inputArgs = process.platform === 'win32'
+        ? ['-f', 'dshow', '-i', `audio=${detectWindowsAudioDevice(tool.command)}`]
+        : ['-f', process.platform === 'darwin' ? 'avfoundation' : 'pulse', '-i', 'default'];
+      args = [
+        ...inputArgs,
+        '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le',
+        '-y', this.tempFile,
+      ];
+    } else if (tool.name === 'pw-record') {
       // pw-record always writes to file (no stdout pipe support)
       args = ['--format', 's16', '--rate', '16000', '--channels', '1', this.tempFile];
     } else if (tool.name === 'parecord') {
@@ -155,9 +184,13 @@ export class NativeRecorder {
         // When piping stdout for silence detection, we consume the stream in real-time.
         // When writing to file (pw-record, no-silence modes), use 'ignore' to avoid
         // pipe buffer deadlock on long recordings (OS pipe buffer is only 64KB).
+        // ffmpeg needs stdin piped so we can send 'q' for graceful shutdown on Windows
+        // (TerminateProcess/SIGINT kills it before it can flush WAV data to disk).
         const stdioOpt: ('ignore' | 'pipe')[] = useStdoutPipe
           ? ['ignore', 'pipe', 'pipe']
-          : ['ignore', 'ignore', 'pipe'];
+          : tool.name === 'ffmpeg'
+            ? ['pipe', 'ignore', 'pipe']
+            : ['ignore', 'ignore', 'pipe'];
         this.process = spawn(tool.command, args, { stdio: stdioOpt });
         diagLog('NativeRecorder', `Spawned ${tool.command} ${args.join(' ')}`);
 
@@ -385,10 +418,13 @@ export class NativeRecorder {
           if (fs.existsSync(tempFile)) {
             const buffer = fs.readFileSync(tempFile);
 
-            // Fix WAV header sizes — handles both stdout-piped recordings
-            // (placeholder header with max sizes) and files from processes killed
-            // before finalizing (e.g. Windows TerminateProcess, Unix SIGKILL).
-            if (buffer.length > 44 && buffer.toString('ascii', 0, 4) === 'RIFF') {
+            // Fix WAV header sizes — only for stdout-piped recordings where
+            // we wrote the placeholder header ourselves with a fixed 44-byte
+            // layout. For tools like ffmpeg that write their own WAV files
+            // and may include extra chunks (LIST/INFO) before the data chunk,
+            // this fixup would corrupt a valid header. Only apply when we know
+            // the layout is "44-byte header + raw PCM" (i.e. we wrote it).
+            if (this.writeStream && buffer.length > 44 && buffer.toString('ascii', 0, 4) === 'RIFF') {
               const dataSize = buffer.length - 44;
               buffer.writeUInt32LE(dataSize + 36, 4); // RIFF chunk size
               buffer.writeUInt32LE(dataSize, 40);      // data chunk size
@@ -420,8 +456,11 @@ export class NativeRecorder {
           // Safety timeout in case 'finish' callback never fires
           setTimeout(readOnce, 2000);
         } else {
-          // File-based recording (no stdout pipe) — small delay for OS flush
-          setTimeout(readOnce, 100);
+          // File-based recording (no stdout pipe).
+          // ffmpeg needs extra time after receiving 'q' to flush its write
+          // buffers and finalize the WAV header before we read the file.
+          const flushDelay = this.toolName === 'ffmpeg' ? 800 : 100;
+          setTimeout(readOnce, flushDelay);
         }
       };
 
@@ -435,18 +474,30 @@ export class NativeRecorder {
       });
 
       // Graceful stop signal depends on the tool:
-      // - sox/rec: SIGINT (Ctrl+C) is the standard stop signal that flushes
-      //   internal audio buffers and finalizes the WAV header. SIGTERM may
-      //   cause sox to skip buffer flush, losing the last seconds of audio.
+      // - ffmpeg on Windows: send 'q\n' to stdin. On Windows, Node.js maps
+      //   all signals to TerminateProcess() (immediate kill), so ffmpeg never
+      //   gets a chance to flush its write buffers or finalize the WAV header,
+      //   resulting in 0-byte or corrupt files. Sending 'q' via stdin triggers
+      //   ffmpeg's own graceful shutdown path which properly closes the file.
+      // - ffmpeg on Unix: SIGINT also works, but stdin 'q' is equally fine.
+      // - sox/rec: SIGINT is the standard stop that flushes audio buffers.
       // - parecord/arecord/pw-record: SIGTERM is fine since we handle the
       //   WAV header ourselves (stdout-piped) or the header is already valid.
-      // On Windows, Node.js maps all signals to TerminateProcess() (immediate
-      // kill) — the WAV header fixup in handleClose() corrects incomplete headers.
-      const stopSignal = this.toolName === 'sox' ? 'SIGINT' : 'SIGTERM';
-      proc.kill(stopSignal);
+      if (this.toolName === 'ffmpeg' && proc.stdin) {
+        try {
+          proc.stdin.write('q');
+          proc.stdin.end();
+          diagLog('NativeRecorder', 'Sent q to ffmpeg stdin for graceful stop');
+        } catch {
+          // stdin closed or broken — fall back to signal
+          try { proc.kill('SIGINT'); } catch { /* ignore */ }
+        }
+      } else {
+        const stopSignal = this.toolName === 'sox' ? 'SIGINT' : 'SIGTERM';
+        proc.kill(stopSignal);
+      }
 
-      // Force kill after 5s if the process hasn't exited.
-      // On Windows SIGTERM already killed the process, so this is a no-op.
+      // Force kill after 5s if the process hasn't exited gracefully.
       killTimeout = setTimeout(() => {
         if (!resolved) {
           try { proc.kill('SIGKILL'); } catch { /* ignore */ }
@@ -619,4 +670,127 @@ function isExecutable(filePath: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Find an executable on Windows by checking PATH and common installation locations.
+ * VS Code's Node process may not inherit the latest PATH changes (e.g. after
+ * winget install), so we also probe well-known directories.
+ */
+function findExecutableWindows(name: string): string | null {
+  // 1. Check PATH via 'where'
+  try {
+    const result = execSync(`where ${name}`, { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf-8', timeout: 5000 });
+    const firstLine = result.trim().split(/\r?\n/)[0];
+    if (firstLine) return firstLine;
+  } catch { /* not in PATH */ }
+
+  // 2. Probe common installation directories (winget, choco, scoop, manual)
+  const exe = `${name}.exe`;
+  const home = os.homedir();
+  const probePaths = [
+    // winget packages
+    path.join(home, 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links', exe),
+    // chocolatey
+    path.join('C:', 'ProgramData', 'chocolatey', 'bin', exe),
+    // scoop
+    path.join(home, 'scoop', 'shims', exe),
+    // manual install common paths
+    path.join('C:', name, 'bin', exe),
+    path.join('C:', 'Program Files', name, 'bin', exe),
+    path.join('C:', 'Program Files', name, exe),
+  ];
+
+  // Also scan winget package directories for nested executables
+  const wingetPkgs = path.join(home, 'AppData', 'Local', 'Microsoft', 'WinGet', 'Packages');
+  try {
+    const dirs = fs.readdirSync(wingetPkgs);
+    for (const dir of dirs) {
+      if (dir.toLowerCase().includes(name.toLowerCase())) {
+        const pkgDir = path.join(wingetPkgs, dir);
+        const found = findExeRecursive(pkgDir, exe, 3);
+        if (found) {
+          probePaths.unshift(found);
+          break;
+        }
+      }
+    }
+  } catch { /* winget dir doesn't exist */ }
+
+  for (const p of probePaths) {
+    try {
+      fs.accessSync(p, fs.constants.X_OK);
+      diagLog('NativeRecorder', `Found ${name} at: ${p}`);
+      return p;
+    } catch { /* not found */ }
+  }
+
+  return null;
+}
+
+/** Recursively search for an exe file, limited to maxDepth levels. */
+function findExeRecursive(dir: string, exe: string, maxDepth: number): string | null {
+  if (maxDepth <= 0) return null;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isFile() && entry.name.toLowerCase() === exe.toLowerCase()) {
+        return fullPath;
+      }
+      if (entry.isDirectory() && maxDepth > 1) {
+        const found = findExeRecursive(fullPath, exe, maxDepth - 1);
+        if (found) return found;
+      }
+    }
+  } catch { /* permission error, etc. */ }
+  return null;
+}
+
+/**
+ * Detect the default Windows audio input device name for ffmpeg DirectShow.
+ * Runs `ffmpeg -list_devices` and picks the first audio device.
+ *
+ * Uses spawnSync (not execSync) to avoid cmd.exe shell quoting issues
+ * with long paths containing spaces (e.g. winget package directories).
+ */
+function detectWindowsAudioDevice(ffmpegCmd: string): string {
+  const result = spawnSync(ffmpegCmd, ['-list_devices', 'true', '-f', 'dshow', '-i', 'dummy'], {
+    timeout: 10000,
+  });
+  // ffmpeg writes device list to stderr (may exit 0 or 1 depending on version)
+  const output = result.stderr?.toString() ?? '';
+  if (output) {
+    diagLog('NativeRecorder', `ffmpeg device list output (${output.length} chars)`);
+    return parseAudioDeviceFromFfmpegOutput(output);
+  }
+  if (result.error) {
+    diagLog('NativeRecorder', `ffmpeg device list error: ${result.error.message}`);
+  }
+  // Fallback: generic name that often works
+  diagLog('NativeRecorder', 'Could not detect Windows audio device, using fallback "Microphone"');
+  return 'Microphone';
+}
+
+function parseAudioDeviceFromFfmpegOutput(output: string): string {
+  // Match lines like: [dshow] "Microphone (Realtek Audio)" (audio)
+  // Also handles newer ffmpeg format: [in#0] "Device Name" (audio)
+  const audioRegex = /]\s*"([^"]+)"\s*\(audio\)/g;
+  let match;
+  while ((match = audioRegex.exec(output)) !== null) {
+    const deviceName = match[1];
+    // Skip virtual/monitor devices
+    if (!deviceName.toLowerCase().includes('monitor') && !deviceName.toLowerCase().includes('stereo mix')) {
+      diagLog('NativeRecorder', `Detected Windows audio device: "${deviceName}"`);
+      return deviceName;
+    }
+  }
+  // If we only found monitor devices, return the first one anyway
+  audioRegex.lastIndex = 0;
+  match = audioRegex.exec(output);
+  if (match) {
+    return match[1];
+  }
+  diagLog('NativeRecorder', 'No audio devices found in ffmpeg output');
+  return 'Microphone';
 }
