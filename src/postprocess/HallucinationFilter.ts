@@ -54,6 +54,8 @@ const HALLUCINATIONS = new Set([
   'napisy stworzone przez społeczność amara.org',
   'dziękuję za uwagę',
   'dziękuję za oglądanie',
+  // Phantom persona hallucinations on music/non-speech audio
+  "i'm william hartsfield",
 ]);
 
 // Regex patterns for common hallucination structures

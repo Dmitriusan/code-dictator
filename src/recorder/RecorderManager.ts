@@ -153,10 +153,17 @@ export class RecorderManager implements vscode.Disposable {
     // because parecord connected to an errored PipeWire stream can hang on
     // SIGTERM, and there's nothing to transcribe anyway.
     this.nativeRecorder.setNoAudioDataHandler((diagnostics) => {
-      this.emit('trackEnded', diagnostics);
       setTimeout(() => {
         if (this._isRecording && this.nativeRecorder) {
+          // Re-check: parecord/PulseAudio can buffer ~2s before flushing the
+          // first chunk, so the initial "no audio" warning may have fired just
+          // before data started flowing. Don't cancel if audio has since arrived.
+          if (this.nativeRecorder.hasReceivedAudio()) {
+            diagLog('RecorderManager', 'Audio data started flowing during grace period — keeping recording alive');
+            return;
+          }
           diagLog('RecorderManager', 'Auto-cancelling recording — no audio data after 4s');
+          this.emit('trackEnded', diagnostics);
           this.clearMaxDurationTimeout();
           this.nativeRecorder.cancel();
           this.nativeRecorder = null;

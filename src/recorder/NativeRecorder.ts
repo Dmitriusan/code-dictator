@@ -36,9 +36,15 @@ export class NativeRecorder {
   private silenceTimeout = 0;
   private silenceStart: number | null = null;
   private silenceCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private totalBytesReceived = 0;
 
   get isRecording(): boolean {
     return this._isRecording;
+  }
+
+  /** True once at least one audio chunk has been received from the recorder process. */
+  hasReceivedAudio(): boolean {
+    return this.totalBytesReceived > 0;
   }
 
   static detectTool(): NativeTool | null {
@@ -174,11 +180,11 @@ export class NativeRecorder {
           const writeStream = this.writeStream;
           // Write WAV header (will be finalized on stop)
           writeStream.write(createWavHeader());
-          let totalBytes = 0;
           let stdoutChunks = 0;
 
           this.process.stdout?.on('data', (chunk: Buffer) => {
-            totalBytes += chunk.length;
+            this.totalBytesReceived += chunk.length;
+            const totalBytes = this.totalBytesReceived;
             stdoutChunks++;
             writeStream.write(chunk);
             this.analyzeChunkForSilence(chunk);
@@ -191,7 +197,7 @@ export class NativeRecorder {
           // Detect "no data flowing" — if mic is unavailable (e.g. Bluetooth
           // hijacked by phone), the process runs but stdout produces nothing.
           setTimeout(() => {
-            if (this._isRecording && totalBytes === 0) {
+            if (this._isRecording && this.totalBytesReceived === 0) {
               const diag = NativeRecorder.diagnosePulseAudioSource();
               diagLog('NativeRecorder', `No audio data received after 2s — ${diag.reason}`);
               if (this.onNoAudioData) { this.onNoAudioData(diag); }
@@ -199,7 +205,7 @@ export class NativeRecorder {
           }, 2000);
 
           this.process.on('close', () => {
-            diagLog('NativeRecorder', `Process closed. Total stdout: ${totalBytes} bytes in ${stdoutChunks} chunks`);
+            diagLog('NativeRecorder', `Process closed. Total stdout: ${this.totalBytesReceived} bytes in ${stdoutChunks} chunks`);
             // writeStream is flushed and closed in stop() to avoid race conditions
           });
         }
@@ -575,6 +581,7 @@ export class NativeRecorder {
     this.speechPeakEma = -60;
     this.vadReady = false;
     this.hasSeenSpeech = false;
+    this.totalBytesReceived = 0;
     if (this.silenceCheckInterval) {
       clearInterval(this.silenceCheckInterval);
       this.silenceCheckInterval = null;
