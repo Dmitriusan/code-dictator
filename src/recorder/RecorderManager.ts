@@ -125,7 +125,7 @@ export class RecorderManager implements vscode.Disposable {
       }
 
       throw new Error(
-        `Microphone unavailable: ${errorMsg}. Please check your audio devices, or install arecord (Linux) / sox (macOS/Windows).`
+        `Microphone unavailable: ${errorMsg}. Please check your audio devices, or install ffmpeg (Windows: winget install Gyan.FFmpeg) / arecord (Linux) / sox (macOS).`
       );
     }
   }
