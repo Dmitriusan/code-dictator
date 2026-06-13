@@ -1,7 +1,7 @@
 {
   "name": "code-dictator",
   "displayName": "Code Dictator",
-  "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cursor, or any AI chat. Accurate dictation in 90+ languages with ElevenLabs — not just English. Zero dependencies.",
+  "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cline, or any AI chat. Accurate dictation in 90+ languages with ElevenLabs — not just English. Zero dependencies.",
   "version": "1.1.14",
   "publisher": "irrationalways",
   "license": "MIT",
@@ -26,8 +26,6 @@
     "accessibility",
     "claude",
     "copilot",
-    "cursor",
-    "windsurf",
     "cline"
   ],
   "icon": "resources/icon.png",

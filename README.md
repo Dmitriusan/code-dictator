@@ -8,7 +8,7 @@
 
 **Stop typing prompts. Start speaking them.**
 
-You talk to AI all day. Claude, Copilot, Cursor, Windsurf — they all understand natural language. So why are you still typing at 70 words per minute when you speak at 150?
+You talk to AI all day. Claude, Copilot, Cline — they all understand natural language. So why are you still typing at 70 words per minute when you speak at 150?
 
 Press `Alt+D`. Speak. Press `Alt+D` again. Paste. Done.
 
@@ -16,7 +16,7 @@ Press `Alt+D`. Speak. Press `Alt+D` again. Paste. Done.
 
 Your words are transcribed in seconds, ready to paste into any AI chat, terminal, or editor. No browser extensions. No microphone setup. No dependencies to install. Just your voice and your code.
 
-**Dictate in your language — not just English.** With ElevenLabs, transcription is accurate across 90+ languages (Ukrainian, Polish, German, Spanish, Japanese, and many more), so non-English speakers get clean results too — not a watered-down, English-first experience.
+**Dictate in your language — not just English.** With ElevenLabs, transcription is accurate across 90+ languages — European and others — so non-English speakers get clean results too, not a watered-down, English-first experience.
 
 ---
 
@@ -46,7 +46,7 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 | | What you get |
 |---|---|
 | **Push-to-talk** | `Alt+D` to start, `Alt+D` to stop. Or hold-to-talk mode. |
-| **Any AI assistant** | Claude, Copilot, Cursor, Windsurf, Cline, terminal — paste anywhere |
+| **Any AI assistant** | Claude, Copilot, Cline, terminal — paste anywhere |
 | **Speaks your language** | Accurate speech-to-text in 90+ languages with ElevenLabs — not just English. Auto-detected; switch with one click. |
 | **Code-aware mode** | Say "open paren" and get `(`. 50+ symbol mappings. |
 | **AI text cleanup** | Optional LLM pass removes filler words and fixes grammar |
