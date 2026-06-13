@@ -100,11 +100,11 @@ export class NativeRecorder {
       }
     }
 
-    // ffmpeg (cross-platform fallback, checked before sox since it's more reliable)
+    // ffmpeg (cross-platform fallback, checked before sox since it's more reliable).
+    // Windows handles ffmpeg above, so here `platform` is always non-win32 → `which`.
     if (platform !== 'win32') {
-      const whichCmd = platform === 'win32' ? 'where' : 'which';
       try {
-        execSync(`${whichCmd} ffmpeg`, { stdio: 'ignore' });
+        execSync('which ffmpeg', { stdio: 'ignore' });
         return { name: 'ffmpeg', command: 'ffmpeg' };
       } catch { /* not found */ }
     }
@@ -129,6 +129,62 @@ export class NativeRecorder {
     return NativeRecorder.detectTool() !== null;
   }
 
+  /**
+   * Build the recorder process arguments for a given tool. All recorders are
+   * configured for 16-bit mono 16 kHz PCM. Pure function (no side effects) so
+   * the argument logic — including the parecord low-latency fix — is unit-testable.
+   */
+  static buildArgs(toolName: string, command: string, useStdoutPipe: boolean, tempFile: string): string[] {
+    if (toolName === 'ffmpeg') {
+      // ffmpeg: uses DirectShow on Windows, default device on macOS/Linux.
+      // Writes WAV to file (no stdout pipe — ffmpeg writes headers at end);
+      // it flushes on graceful 'q' shutdown, so it doesn't need a latency cap.
+      const inputArgs = process.platform === 'win32'
+        ? ['-f', 'dshow', '-i', `audio=${detectWindowsAudioDevice(command)}`]
+        : ['-f', process.platform === 'darwin' ? 'avfoundation' : 'pulse', '-i', 'default'];
+      return [
+        ...inputArgs,
+        '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le',
+        '-y', tempFile,
+      ];
+    }
+
+    if (toolName === 'pw-record') {
+      // pw-record always writes to file (no stdout pipe support).
+      return ['--format', 's16', '--rate', '16000', '--channels', '1', tempFile];
+    }
+
+    if (toolName === 'parecord') {
+      // --latency-msec caps the PulseAudio/PipeWire capture buffer. Without it,
+      // parecord negotiates a large (~1-2 s) record fragment, and on stop the
+      // process is signalled and exits WITHOUT draining that buffer — so the
+      // last 1-2 seconds of speech are silently dropped. Empirically (PipeWire,
+      // 16 kHz mono): no flag → 1-2 s lost; --latency-msec=100 → ~0.1 s. Neither
+      // SIGINT nor SIGTERM makes parecord flush, so a small capture buffer is the
+      // only reliable fix. arecord/pw-record don't over-buffer and need no flag.
+      const lowLatency = '--latency-msec=100';
+      return useStdoutPipe
+        // Output raw PCM to stdout for real-time silence analysis.
+        ? [lowLatency, '--format=s16le', '--rate=16000', '--channels=1', '--raw']
+        : [lowLatency, '--format=s16le', '--rate=16000', '--channels=1', '--file-format=wav', tempFile];
+    }
+
+    if (toolName === 'arecord') {
+      return useStdoutPipe
+        // Output raw PCM to stdout for real-time silence analysis.
+        ? ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'raw', '-']
+        : ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'wav', tempFile];
+    }
+
+    if (command.endsWith('rec')) {
+      // sox's `rec` alias records from the default input device implicitly.
+      return ['-r', '16000', '-c', '1', '-b', '16', tempFile];
+    }
+
+    // sox with explicit default input device (-d).
+    return ['-d', '-r', '16000', '-c', '1', '-b', '16', tempFile];
+  }
+
   async start(silenceTimeout = 0): Promise<void> {
     if (this._isRecording) {
       throw new Error('Already recording');
@@ -147,41 +203,7 @@ export class NativeRecorder {
     // pw-record and ffmpeg do NOT support stdout piping for silence detection.
     const useStdoutPipe = silenceTimeout > 0 && (tool.name === 'arecord' || tool.name === 'parecord');
 
-    let args: string[];
-    if (tool.name === 'ffmpeg') {
-      // ffmpeg: uses DirectShow on Windows, default device on macOS/Linux.
-      // Writes WAV to file (no stdout pipe — ffmpeg writes headers at end).
-      const inputArgs = process.platform === 'win32'
-        ? ['-f', 'dshow', '-i', `audio=${detectWindowsAudioDevice(tool.command)}`]
-        : ['-f', process.platform === 'darwin' ? 'avfoundation' : 'pulse', '-i', 'default'];
-      args = [
-        ...inputArgs,
-        '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le',
-        '-y', this.tempFile,
-      ];
-    } else if (tool.name === 'pw-record') {
-      // pw-record always writes to file (no stdout pipe support)
-      args = ['--format', 's16', '--rate', '16000', '--channels', '1', this.tempFile];
-    } else if (tool.name === 'parecord') {
-      if (useStdoutPipe) {
-        // Output raw PCM to stdout for real-time analysis
-        args = ['--format=s16le', '--rate=16000', '--channels=1', '--raw'];
-      } else {
-        args = ['--format=s16le', '--rate=16000', '--channels=1', '--file-format=wav', this.tempFile];
-      }
-    } else if (tool.name === 'arecord') {
-      if (useStdoutPipe) {
-        // Output raw PCM to stdout for real-time analysis
-        args = ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'raw', '-'];
-      } else {
-        args = ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'wav', this.tempFile];
-      }
-    } else if (tool.command.endsWith('rec')) {
-      args = ['-r', '16000', '-c', '1', '-b', '16', this.tempFile];
-    } else {
-      // sox with default input
-      args = ['-d', '-r', '16000', '-c', '1', '-b', '16', this.tempFile];
-    }
+    const args = NativeRecorder.buildArgs(tool.name, tool.command, useStdoutPipe, this.tempFile);
 
     return new Promise((resolve, reject) => {
       try {
@@ -207,9 +229,11 @@ export class NativeRecorder {
           }
         });
 
-        // If piping stdout, write raw PCM to file and analyze for silence
+        // If piping stdout, write raw PCM to file and analyze for silence.
+        // tempFile is assigned above (before this Promise), so the non-null
+        // assertion is safe — TS just can't carry the narrowing into the closure.
         if (useStdoutPipe) {
-          this.writeStream = fs.createWriteStream(this.tempFile);
+          this.writeStream = fs.createWriteStream(this.tempFile!);
           const writeStream = this.writeStream;
           // Write WAV header (will be finalized on stop)
           writeStream.write(createWavHeader());

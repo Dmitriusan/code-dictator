@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cursor, or any AI chat. Zero dependencies, 37 languages.",
-  "version": "1.1.13",
+  "version": "1.1.14",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -435,7 +435,7 @@
             "default": 0,
             "minimum": 0,
             "maximum": 60,
-            "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Silence detection requires the webview-based recorder. On Linux systems using arecord as the native recorder, this setting has no effect — use `recording.maxDuration` instead.*\n\n*Silence detection may not work reliably in noisy environments or with background music — consider using `recording.maxDuration` as a fallback in those situations.*"
+            "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Works with the webview recorder and the native `arecord`/`parecord` recorders. It is unavailable with the `pw-record` recorder (which can't stream audio for live analysis) — use `recording.maxDuration` instead in that case.*\n\n*Silence detection may not work reliably in noisy environments or with background music — consider using `recording.maxDuration` as a fallback in those situations.*"
           },
           "codeDictator.recording.maxDuration": {
             "order": 4,
@@ -571,6 +571,7 @@
     "watch": "npm run compile -- --watch",
     "build": "npm run compile:prod",
     "lint": "eslint src --ext ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "tsc -p tsconfig.e2e.json && node dist-test/runTests.js",

@@ -171,9 +171,11 @@ The primary recording path uses a hidden WebView with the browser's MediaRecorde
 
 ### Native Recorder (Linux fallback, macOS/Windows fallback)
 
-On Linux, where WebView microphone permissions are frequently sandboxed by the desktop environment (Wayland compositors, Snap/Flatpak confinement), the extension falls back to `arecord` (ALSA). On macOS and Windows, `sox`/`rec` serves as the fallback if WebView recording fails for any reason.
+On Linux, where WebView microphone permissions are frequently sandboxed by the desktop environment (Wayland compositors, Snap/Flatpak confinement), the extension falls back to a native recorder, preferring `parecord` / `pw-record` (PulseAudio/PipeWire, so Bluetooth mics route correctly) over `arecord` (ALSA). On macOS and Windows, `sox`/`rec` serves as the fallback if WebView recording fails for any reason.
 
-When using the native recorder with silence detection enabled, `arecord` is launched in raw PCM stdout-pipe mode (`-t raw -`) rather than writing directly to a WAV file. The extension host process reads the PCM stream, writes it to disk with a WAV header, and simultaneously feeds each chunk to the adaptive VAD described in this document. The WAV header is written with a placeholder data size and patched with the correct size when recording stops.
+When using the native recorder with silence detection enabled, `arecord`/`parecord` is launched in raw PCM stdout-pipe mode (`-t raw -` / `--raw`) rather than writing directly to a WAV file. The extension host process reads the PCM stream, writes it to disk with a WAV header, and simultaneously feeds each chunk to the adaptive VAD described in this document. The WAV header is written with a placeholder data size and patched with the correct size when recording stops. (`pw-record` cannot stream to stdout, so it always writes to a file and silence detection is unavailable with it.)
+
+To avoid PulseAudio/PipeWire dropping the tail of a recording, `parecord` is launched with `--latency-msec=100`, which caps the capture buffer; otherwise the last 1–2 seconds are lost when the process is signalled to stop.
 
 This architecture means the adaptive VAD runs in the Node.js extension host process, operating on time-domain PCM samples — a fundamentally different signal path from the WebView's frequency-domain approach. The dBFS/EMA model described here was designed specifically for this raw PCM path, where no browser-level gain normalization occurs and the full dynamic range of the input device is preserved.
 

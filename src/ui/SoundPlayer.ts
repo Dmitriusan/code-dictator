@@ -64,9 +64,35 @@ function generateChimeWav(): Buffer {
 /** Cached WAV buffer — generated once, reused. */
 let cachedWav: Buffer | null = null;
 
+interface PlayerCommand {
+  cmd: string;
+  args: string[];
+}
+
+/**
+ * OS audio-player commands to try, in priority order, for the given file.
+ * On Linux we prefer PipeWire/PulseAudio players (which route to the user's
+ * default sink, including Bluetooth) before raw-ALSA `aplay` — mirroring the
+ * recorder's tool preference. macOS and Windows each have one reliable built-in.
+ */
+function playerCandidates(tmpPath: string): PlayerCommand[] {
+  if (process.platform === 'darwin') {
+    return [{ cmd: 'afplay', args: [tmpPath] }];
+  }
+  if (process.platform === 'win32') {
+    return [{ cmd: 'powershell', args: ['-c', `(New-Object Media.SoundPlayer '${tmpPath}').PlaySync()`] }];
+  }
+  // Linux: PipeWire → PulseAudio → ALSA.
+  return [
+    { cmd: 'pw-play', args: [tmpPath] },
+    { cmd: 'paplay', args: [tmpPath] },
+    { cmd: 'aplay', args: [tmpPath] },
+  ];
+}
+
 /**
  * Plays a short completion chime using OS-native audio playback.
- * Works cross-platform: aplay (Linux), afplay (macOS), PowerShell (Windows).
+ * Cross-platform: pw-play/paplay/aplay (Linux), afplay (macOS), PowerShell (Windows).
  */
 export async function playCompletionChime(): Promise<void> {
   if (!cachedWav) {
@@ -78,30 +104,30 @@ export async function playCompletionChime(): Promise<void> {
   try {
     await writeFile(tmpPath, cachedWav);
 
-    const cmd = process.platform === 'darwin'
-      ? 'afplay'
-      : process.platform === 'win32'
-        ? 'powershell'
-        : 'aplay';
+    // Try each candidate until one plays successfully. A missing command
+    // (ENOENT) or playback error falls through to the next candidate.
+    let lastError: Error | undefined;
+    for (const { cmd, args } of playerCandidates(tmpPath)) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          execFile(cmd, args, { timeout: 5000 }, (error) => {
+            if (error) { reject(error); } else { resolve(); }
+          });
+        });
+        lastError = undefined;
+        break; // played successfully
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
 
-    const args = process.platform === 'win32'
-      ? ['-c', `(New-Object Media.SoundPlayer '${tmpPath}').PlaySync()`]
-      : [tmpPath];
-
-    await new Promise<void>((resolve, reject) => {
-      execFile(cmd, args, { timeout: 5000 }, (error) => {
-        // Clean up temp file regardless of outcome
-        unlink(tmpPath).catch(() => {});
-        if (error) {
-          reject(error);
-        } else {
-          resolve();
-        }
-      });
-    });
+    if (lastError) {
+      diagLog('SoundPlayer', `Completion chime failed: ${lastError.message}`);
+    }
   } catch (err) {
     diagLog('SoundPlayer', `Completion chime failed: ${err instanceof Error ? err.message : String(err)}`);
-    // Clean up on error
+  } finally {
+    // Clean up the temp file regardless of outcome.
     unlink(tmpPath).catch(() => {});
   }
 }

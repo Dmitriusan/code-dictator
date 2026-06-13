@@ -50,7 +50,7 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 | **AI text cleanup** | Optional LLM pass removes filler words and fixes grammar |
 | **Noise reduction** | Built-in audio isolation — basic or aggressive |
 | **Cost tracking** | See your spend in the status bar. Know exactly what you're paying. |
-| **Zero dependencies** | ~130KB package. No sox, no ffmpeg, no Python. Just install and go. |
+| **Zero dependencies** | No native binaries — no sox, no ffmpeg, no Python. Just install and go. |
 | **Cross-platform** | macOS, Windows, Linux. Native fallback on each. |
 | **Privacy-first** | No telemetry. No data collection. API keys in your OS keychain. |
 
@@ -135,7 +135,7 @@ Settings are grouped into sections in the VS Code Settings UI.
 |---|---|---|
 | `textProcessing.codeAware` | `true` | Spoken-to-symbol conversion |
 | `textProcessing.aiCleanup` | `false` | LLM cleanup (requires OpenAI key) |
-| `textProcessing.aiModel` | `gpt-4.1-nano` | Model for text cleanup |
+| `textProcessing.aiModel` | `gpt-4.1-mini` | Model for text cleanup |
 
 **Recording**
 
@@ -166,7 +166,7 @@ All settings under the `codeDictator.*` namespace.
 
 ## How It Works
 
-Code Dictator records via the browser's MediaRecorder API in a hidden WebView — zero native dependencies on macOS and Windows. On Linux, it auto-detects when WebView mic permissions are sandboxed and falls back to `arecord` (pre-installed on most distros). You don't configure anything; it just works.
+Code Dictator records via the browser's MediaRecorder API in a hidden WebView — zero native dependencies on macOS and Windows. On Linux, if WebView mic permissions are sandboxed, it falls back to a native recorder, auto-detecting your audio stack: `parecord` / `pw-record` (PulseAudio/PipeWire — so Bluetooth mics work) or `arecord` (ALSA), all pre-installed on most distros. You don't configure anything; it just works.
 
 **Adaptive silence detection** (when enabled) uses dual exponential moving averages to track your noise floor and speech energy in real-time. No calibration needed — it adapts to your microphone and environment automatically. See the [technical reference](docs/voice-activity-detection.md) for details.
 

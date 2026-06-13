@@ -2,6 +2,15 @@
 
 All notable changes to Code Dictator will be documented in this file.
 
+## [1.1.14] - 2026-06-13
+
+### Fixed
+- **Linux: recovered the last 1–2 seconds of longer recordings.** When the native `parecord` (PulseAudio/PipeWire) recorder was in use, the tail of each recording was silently dropped — PulseAudio/PipeWire buffers ~1–2 s of audio, and that buffer was discarded when recording stopped, cutting off the final words. `parecord` now runs with a capped capture latency (`--latency-msec=100`), reducing tail loss from 1–2 s to ~0.1 s. Affects both the default (file) and silence-detection (raw stream) recording paths.
+
+### Changed
+- Linux completion chime now prefers PipeWire/PulseAudio players (`pw-play` → `paplay`) before falling back to `aplay`, so it routes to your active output device (including Bluetooth).
+- Docs: corrected the native-recorder description (PulseAudio/PipeWire preferred over ALSA for Bluetooth support) and the AI-cleanup default model in the README, and clarified that silence auto-stop works with `arecord`/`parecord` (but not `pw-record`).
+
 ## [1.1.0] - 2026-03-17
 
 Stability improvements and bug fixes. Better Bluetooth headphone support on all platforms — the extension now detects when a wireless device disconnects mid-recording and shows a helpful message instead of producing empty transcriptions. On Linux, PipeWire/PulseAudio recorders are preferred over ALSA for reliable Bluetooth audio routing. Improved language handling in AI text cleanup — the post-processing LLM now respects your configured languages instead of occasionally producing output in unrelated languages.

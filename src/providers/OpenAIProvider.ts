@@ -122,7 +122,7 @@ export class OpenAIProvider implements STTProvider {
     return (durationMs / 1000) * COST_PER_SECOND;
   }
 
-  private static async formatHttpError(response: Response): string {
+  private static async formatHttpError(response: Response): Promise<string> {
     const body = await response.text().catch(() => '');
     let detail = '';
     try {
