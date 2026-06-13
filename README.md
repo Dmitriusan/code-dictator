@@ -16,6 +16,8 @@ Press `Alt+D`. Speak. Press `Alt+D` again. Paste. Done.
 
 Your words are transcribed in seconds, ready to paste into any AI chat, terminal, or editor. No browser extensions. No microphone setup. No dependencies to install. Just your voice and your code.
 
+**Dictate in your language — not just English.** With ElevenLabs, transcription is accurate across 90+ languages (Ukrainian, Polish, German, Spanish, Japanese, and many more), so non-English speakers get clean results too — not a watered-down, English-first experience.
+
 ---
 
 ## Get Started in 30 Seconds
@@ -45,7 +47,7 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 |---|---|
 | **Push-to-talk** | `Alt+D` to start, `Alt+D` to stop. Or hold-to-talk mode. |
 | **Any AI assistant** | Claude, Copilot, Cursor, Windsurf, Cline, terminal — paste anywhere |
-| **37 languages** | Auto-detected. Switch with one click. |
+| **Speaks your language** | Accurate speech-to-text in 90+ languages with ElevenLabs — not just English. Auto-detected; switch with one click. |
 | **Code-aware mode** | Say "open paren" and get `(`. 50+ symbol mappings. |
 | **AI text cleanup** | Optional LLM pass removes filler words and fixes grammar |
 | **Noise reduction** | Built-in audio isolation — basic or aggressive |
@@ -67,7 +69,7 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 | **Latency** | ~1-2s | ~1-3s | Varies |
 | **Best for** | Most developers | Existing OpenAI users | Privacy / self-hosted |
 
-We recommend **ElevenLabs** — it's the most accurate, has a generous free tier, and just works.
+We recommend **ElevenLabs** — it's the most accurate, has a generous free tier, and just works. Its multilingual transcription is a standout: dictate in your own language and get clean, accurate text — not only in English.
 
 > [Sign up for ElevenLabs](https://try.elevenlabs.io/rgoomc9z8dvv) — free tier, no credit card required
 >
