@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for VS Code — speak instead of typing prompts. Press Alt+D, talk, and paste into Claude, Copilot, Cline, or any AI chat. Accurate dictation in 90+ languages with ElevenLabs — not just English. Zero dependencies.",
-  "version": "1.1.14",
+  "version": "1.1.15",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -579,15 +579,15 @@
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {
-    "@types/node": "^25.x",
+    "@types/node": "^25.9.5",
     "@types/vscode": "^1.85.0",
-    "@vscode/test-electron": "^2.4.0",
-    "@vscode/vsce": "^3.0.0",
-    "esbuild": "^0.27.4",
-    "eslint": "^10.0.3",
-    "typescript": "^5.9.0",
-    "vitest": "^4.1.0",
-    "@typescript-eslint/eslint-plugin": "^8.57.1",
-    "@typescript-eslint/parser": "^8.0.0"
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.8.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }

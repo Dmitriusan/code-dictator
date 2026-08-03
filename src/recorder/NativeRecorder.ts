@@ -319,10 +319,16 @@ export class NativeRecorder {
   private speechPeakEma = -60;  // EMA of speech peaks (dBFS)
   private vadReady = false;     // True once we've seen both silence and speech
   private hasSeenSpeech = false;
+  private noiseFloorSeeded = false;
+  private chunksSinceFloorUpdate = 0;
 
   // EMA smoothing factors (α). Lower = smoother/slower adaptation.
   // Noise floor adapts slowly (tracks ambient drift), speech peak adapts moderately.
   private static readonly NOISE_ALPHA = 0.05;
+  // Downward adaptation is much faster: anything quieter than the current floor is
+  // a better ambient estimate than what we have, and the seed can be too high when
+  // the speaker starts talking the instant recording opens.
+  private static readonly NOISE_FALL_ALPHA = 0.3;
   private static readonly SPEECH_ALPHA = 0.1;
   // Threshold is placed at this fraction between noise floor and speech peak (in dB).
   // 0.3 = closer to noise (more sensitive), 0.7 = closer to speech (less sensitive).
@@ -336,6 +342,12 @@ export class NativeRecorder {
   // The adaptive threshold handles normal silence detection; this only catches
   // truly dead/disconnected audio streams.
   private static readonly ABSOLUTE_SILENCE_DBFS = -90;
+  // Anti-latch: the noise floor only adapts on non-speech chunks, so a floor that
+  // is seeded too low makes every later chunk look like speech and the floor can
+  // never recover. If nothing has been classified as noise for this many chunks
+  // (~10/s), the floor is stale — creep it upward until it re-engages.
+  private static readonly FLOOR_STALE_CHUNKS = 50;
+  private static readonly FLOOR_DRIFT_DB = 0.5;
 
   /**
    * Analyze raw PCM S16_LE audio data for silence detection using adaptive VAD.
@@ -365,10 +377,18 @@ export class NativeRecorder {
 
     this.chunkCount++;
 
-    // Bootstrap: seed the noise floor EMA with the first chunk
-    if (this.chunkCount === 1) {
+    // Bootstrap: seed the noise floor EMA from the first chunk that carries real
+    // signal. parecord/arecord commonly emit all-zero chunks (-96 dBFS) while the
+    // device spins up; seeding from those pins the floor at the digital floor, and
+    // since it only adapts on non-speech chunks, everything afterwards is classified
+    // as speech and silence auto-stop never fires for the whole recording.
+    if (!this.noiseFloorSeeded) {
+      if (dbfs <= NativeRecorder.ABSOLUTE_SILENCE_DBFS) {
+        return; // Device not producing audio yet — not a usable ambient reading
+      }
       this.noiseFloorEma = dbfs;
-      diagLog('NativeRecorder', `VAD init: first chunk dBFS=${dbfs.toFixed(1)}`);
+      this.noiseFloorSeeded = true;
+      diagLog('NativeRecorder', `VAD init: seeded noise floor at dBFS=${dbfs.toFixed(1)} (chunk #${this.chunkCount})`);
       return;
     }
 
@@ -385,9 +405,19 @@ export class NativeRecorder {
         this.speechPeakEma = dbfs; // Seed with first speech sample
         diagLog('NativeRecorder', `VAD: first speech detected at dBFS=${dbfs.toFixed(1)}, noiseFloor=${this.noiseFloorEma.toFixed(1)}`);
       }
+      // Anti-latch: a correct floor gets refreshed by the pauses between words. A
+      // long unbroken run of "speech" means the floor sits below the real ambient
+      // level, so nudge it up until noise chunks start registering again.
+      if (++this.chunksSinceFloorUpdate > NativeRecorder.FLOOR_STALE_CHUNKS) {
+        this.noiseFloorEma += NativeRecorder.FLOOR_DRIFT_DB;
+      }
     } else {
       // Update noise floor EMA (only when not speaking, so speech doesn't pull it up)
-      this.noiseFloorEma = this.noiseFloorEma + NativeRecorder.NOISE_ALPHA * (dbfs - this.noiseFloorEma);
+      const alpha = dbfs < this.noiseFloorEma
+        ? NativeRecorder.NOISE_FALL_ALPHA
+        : NativeRecorder.NOISE_ALPHA;
+      this.noiseFloorEma = this.noiseFloorEma + alpha * (dbfs - this.noiseFloorEma);
+      this.chunksSinceFloorUpdate = 0;
     }
 
     // Compute adaptive threshold: interpolate between noise floor and speech peak
@@ -656,6 +686,8 @@ export class NativeRecorder {
     this.speechPeakEma = -60;
     this.vadReady = false;
     this.hasSeenSpeech = false;
+    this.noiseFloorSeeded = false;
+    this.chunksSinceFloorUpdate = 0;
     this.totalBytesReceived = 0;
     if (this.silenceCheckInterval) {
       clearInterval(this.silenceCheckInterval);

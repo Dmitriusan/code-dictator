@@ -1,4 +1,3 @@
-import * as assert from 'assert';
 import * as vscode from 'vscode';
 
 /**
@@ -10,8 +9,12 @@ import * as vscode from 'vscode';
  *   2. Core commands are registered: toggleRecording, cancelRecording, transcribeFile
  */
 export async function run(): Promise<void> {
+  // Narrow with a plain throw rather than assert.ok — assertion-function narrowing
+  // does not apply through a namespace import, so `ext` would stay possibly-undefined.
   const ext = vscode.extensions.getExtension('irrationalways.code-dictator');
-  assert.ok(ext, 'Extension irrationalways.code-dictator not found in extension host');
+  if (!ext) {
+    throw new Error('Extension irrationalways.code-dictator not found in extension host');
+  }
 
   // Activate explicitly — activationEvents: onStartupFinished may not fire in test host
   if (!ext.isActive) {

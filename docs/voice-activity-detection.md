@@ -56,9 +56,20 @@ The system maintains two continuously updated estimates using exponential moving
 F[n] = F[n-1] + alpha_noise * (dBFS[n] - F[n-1])
 ```
 
-- `alpha_noise = 0.05` — slow adaptation, time constant of ~20 chunks
+- `alpha_noise = 0.05` when the chunk is louder than the current floor — slow adaptation, time constant of ~20 chunks
+- `alpha_noise_fall = 0.3` when the chunk is quieter than the current floor — fast adaptation, so a floor seeded too high (speaker talking from the first chunk) drops to ambient within a few hundred milliseconds
 - Updated **only during non-speech chunks** to prevent speech energy from inflating the floor estimate
 - Tracks gradual environmental changes (HVAC cycling, window opened, background music fading)
+
+#### Anti-latch drift
+
+Because the floor only adapts on non-speech chunks, a floor sitting *below* the true ambient level is self-sustaining: every chunk clears the `MIN_SNR_DB` margin, so nothing is ever classified as noise and the estimate can never recover. A correctly-placed floor is refreshed constantly by the pauses between words, so an unbroken run of "speech" is itself the signal that the estimate is stale:
+
+```
+if no non-speech chunk for FLOOR_STALE_CHUNKS: F[n] = F[n-1] + FLOOR_DRIFT_DB
+```
+
+with `FLOOR_STALE_CHUNKS = 50` (~5 s) and `FLOOR_DRIFT_DB = 0.5`. The floor creeps upward until ambient chunks fall back inside the margin and normal adaptation resumes.
 
 ### Speech Peak Estimate (moderate EMA)
 
@@ -103,7 +114,9 @@ The VAD operates as a three-phase state machine:
 
 ### Phase 1: Bootstrap
 
-The first audio chunk seeds the noise floor EMA. No classification or silence detection occurs. This avoids undefined initial state.
+The noise floor EMA is seeded from the first chunk carrying real signal — anything at or below `ABSOLUTE_SILENCE_DBFS` (-90 dBFS) is skipped. No classification or silence detection occurs during this phase. This avoids undefined initial state.
+
+The dead-chunk skip matters because `parecord`/`arecord` routinely emit all-zero chunks (-96 dBFS) while the capture device spins up. Seeding from one pins the floor at the 16-bit quantization floor, roughly 35 dB below real ambient noise — which then latches (see *Anti-latch drift* above) and suppresses silence detection for the entire recording.
 
 ### Phase 2: Calibration
 

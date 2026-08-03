@@ -2,6 +2,15 @@
 
 All notable changes to Code Dictator will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **AI cleanup no longer acts on what you dictated.** When a transcription read like a request ("write a description for…", "what's the capital of…"), the cleanup model would answer it and inject its reply instead of your words. The transcript is now passed as delimited data rather than as the request itself, and the result is checked against the original before use — if the model rewrote, summarised, or answered instead of tidying, the raw transcription is kept.
+- **Silence auto-stop now works on Linux.** `parecord`/`arecord` often emit a chunk of digital silence while the microphone spins up. That chunk was used to calibrate the noise floor, pinning it ~35 dB below real ambient noise. Everything afterwards then registered as speech, so the noise floor never adapted and `recording.silenceTimeout` never fired for the whole recording. The floor is now seeded from the first chunk with real signal, adapts downward quickly, and drifts back up if it ever gets stuck below ambient.
+
+### Changed
+- Dependencies refreshed: TypeScript 6, esbuild 0.28 (clears a Windows dev-server advisory), ESLint 10.8, Vitest 4.1.10, `@vscode/vsce` 3.9, `@vscode/test-electron` 3, and `actions/checkout@v7` in CI.
+
 ## [1.1.14] - 2026-06-13
 
 ### Fixed
