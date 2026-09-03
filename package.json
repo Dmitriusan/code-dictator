@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for Claude Code, Copilot, Cline, or any AI chat in VS Code — 90+ languages, zero local dependencies, powered by ElevenLabs. Press Alt+D, talk, paste.",
-  "version": "1.1.16",
+  "version": "1.1.17",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -26,7 +26,13 @@
     "accessibility",
     "claude",
     "copilot",
-    "cline"
+    "cline",
+    "speech recognition",
+    "transcribe",
+    "elevenlabs",
+    "openai",
+    "ai chat",
+    "multilingual"
   ],
   "icon": "resources/icon.png",
   "repository": {
