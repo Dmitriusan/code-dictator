@@ -4,12 +4,17 @@ All notable changes to Code Dictator will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **A failed transcription no longer loses your recording.** When the speech-to-text service turns a recording away (quota exceeded, rate limit, network error), the audio is now kept and the error offers **Retry** to send it again once the problem is sorted. A recording you didn't retry from the notification can be sent later with **Code Dictator: Retry Failed Transcription**, even after restarting VS Code. Up to 10 failed recordings are kept, and each is deleted once it has been transcribed.
+- **ElevenLabs "system busy" errors are retried automatically.** When ElevenLabs answers that its servers are overloaded (`system_busy`), Code Dictator now waits and resends the recording up to two more times before reporting an error. Escape cancels the wait.
+
 ### Fixed
 - **Recordings with a quiet start are no longer thrown away as "Microphone is producing silence".** The silence check that runs before transcription measured only the first second of audio. Microphones with noise suppression output near-digital silence until you start talking, so pausing for a second before speaking discarded the whole recording — minutes of dictation included. The check now scans the entire recording and skips transcription only when no part of it is audible. It also finds the samples in WAV files with extra header chunks (as ffmpeg writes them), and no longer tries to judge compressed webm/ogg audio.
 - **AI cleanup no longer acts on what you dictated.** When a transcription read like a request ("write a description for…", "what's the capital of…"), the cleanup model would answer it and inject its reply instead of your words. The transcript is now passed as delimited data rather than as the request itself, and the result is checked against the original before use — if the model rewrote, summarised, or answered instead of tidying, the raw transcription is kept.
 - **Silence auto-stop now works on Linux.** `parecord`/`arecord` often emit a chunk of digital silence while the microphone spins up. That chunk was used to calibrate the noise floor, pinning it ~35 dB below real ambient noise. Everything afterwards then registered as speech, so the noise floor never adapted and `recording.silenceTimeout` never fired for the whole recording. The floor is now seeded from the first chunk with real signal, adapts downward quickly, and drifts back up if it ever gets stuck below ambient.
 
 ### Changed
+- **ElevenLabs 429 errors now say what actually happened.** They were all reported as "rate limit reached". The message now carries ElevenLabs' own code and explanation: overloaded servers (`system_busy`), your plan's concurrency limit, or a real rate limit.
 - Dependencies refreshed: TypeScript 6, esbuild 0.28 (clears a Windows dev-server advisory), ESLint 10.8, Vitest 4.1.10, `@vscode/vsce` 3.9, `@vscode/test-electron` 3, and `actions/checkout@v7` in CI.
 
 ## [1.1.14] - 2026-06-13

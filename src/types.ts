@@ -5,6 +5,8 @@ export interface TranscribeOptions {
   format?: string;
   mimeType?: string;
   signal?: AbortSignal;
+  /** Called when the provider pauses before resending after a transient server error. */
+  onRetry?: (reason: string, delayMs: number) => void;
 }
 
 export interface TranscriptionResult {
@@ -28,6 +30,13 @@ export type RecordingMode = 'toggle' | 'hold';
 export type AudioIsolation = 'off' | 'basic' | 'aggressive';
 export type InjectionTarget = 'clipboard' | 'editor';
 export type ProviderType = 'elevenlabs' | 'openai' | 'custom';
+
+/** A finished recording, as handed from the recorder to the transcription pipeline. */
+export interface AudioDataPayload {
+  buffer: Buffer;
+  mimeType: string;
+  durationMs: number;
+}
 
 // Settings
 export interface CodeDictatorSettings {

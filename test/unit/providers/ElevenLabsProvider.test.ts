@@ -217,8 +217,126 @@ describe('ElevenLabsProvider', () => {
       const audio = Buffer.from('fake-audio');
 
       await expect(provider.transcribe(audio, {})).rejects.toThrow(
-        'ElevenLabs rate limit reached'
+        'ElevenLabs rate limit reached. Please wait a moment and try again.'
       );
+    });
+
+    it('passes on the ElevenLabs code and explanation for a 429', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => JSON.stringify({
+          detail: {
+            type: 'rate_limit_error',
+            code: 'concurrent_limit_exceeded',
+            message: 'Maximum number of concurrent requests exceeded. Higher subscription tiers have a higher concurrency limit.',
+          },
+        }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+
+      await expect(provider.transcribe(Buffer.from('fake-audio'), {})).rejects.toThrow(
+        'ElevenLabs concurrency limit reached (concurrent_limit_exceeded). Maximum number of concurrent requests exceeded. Higher subscription tiers have a higher concurrency limit.'
+      );
+      expect(mockFetch).toHaveBeenCalledTimes(1); // only system_busy is retried
+    });
+
+    it('reads the 429 code from the older "status" field too', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => JSON.stringify({
+          detail: { status: 'too_many_concurrent_requests', message: 'Too many concurrent requests.' },
+        }),
+      });
+
+      const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+
+      await expect(provider.transcribe(Buffer.from('fake-audio'), {})).rejects.toThrow(
+        'ElevenLabs concurrency limit reached (too_many_concurrent_requests). Too many concurrent requests.'
+      );
+    });
+
+    it('shows a 429 code it does not know instead of hiding it', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => JSON.stringify({ detail: { code: 'brand_new_limit', message: 'Something new.' } }),
+      });
+
+      const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+
+      await expect(provider.transcribe(Buffer.from('fake-audio'), {})).rejects.toThrow(
+        'ElevenLabs rate limit reached (brand_new_limit). Something new.'
+      );
+    });
+
+    describe('when ElevenLabs is overloaded (429 system_busy)', () => {
+      const busy = {
+        ok: false,
+        status: 429,
+        text: async () => JSON.stringify({
+          detail: { type: 'rate_limit_error', code: 'system_busy', message: 'The system is currently busy. Try again later.' },
+        }),
+      };
+      const success = { ok: true, json: async () => ({ text: 'hello', language_code: 'en' }) };
+
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('resends the same audio after a pause and succeeds', async () => {
+        const mockFetch = vi.fn().mockResolvedValueOnce(busy).mockResolvedValueOnce(success);
+        globalThis.fetch = mockFetch;
+        const onRetry = vi.fn();
+        const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+
+        const result = provider.transcribe(Buffer.from('fake-audio'), { onRetry });
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(mockFetch).toHaveBeenCalledTimes(1); // still pausing
+
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(result).resolves.toMatchObject({ text: 'hello' });
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(mockFetch.mock.calls[1][1].body).toBe(mockFetch.mock.calls[0][1].body);
+        expect(onRetry).toHaveBeenCalledWith(expect.stringContaining('(system_busy)'), 2000);
+      });
+
+      it('gives up after two retries and says how often it tried', async () => {
+        const mockFetch = vi.fn().mockResolvedValue(busy);
+        globalThis.fetch = mockFetch;
+        const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+
+        const failure = expect(provider.transcribe(Buffer.from('fake-audio'), {})).rejects.toThrow(
+          'ElevenLabs is overloaded right now (system_busy). The system is currently busy. Try again later. Tried 3 times.'
+        );
+        await vi.advanceTimersByTimeAsync(2000 + 5000);
+        await failure;
+        expect(mockFetch).toHaveBeenCalledTimes(3);
+      });
+
+      it('stops pausing as soon as the user cancels', async () => {
+        const mockFetch = vi.fn().mockResolvedValue(busy);
+        globalThis.fetch = mockFetch;
+        const abort = new AbortController();
+        const provider = new ElevenLabsProvider(async () => 'test-key-12345678');
+
+        const cancelled = expect(
+          provider.transcribe(Buffer.from('fake-audio'), { signal: abort.signal }),
+        ).rejects.toMatchObject({ name: 'AbortError' });
+        await vi.advanceTimersByTimeAsync(500);
+        abort.abort();
+        await cancelled;
+
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(mockFetch).toHaveBeenCalledTimes(1); // no resend after cancelling
+      });
     });
 
     it('throws user-friendly message on 500/503 (service unavailable)', async () => {

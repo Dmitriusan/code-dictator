@@ -5,6 +5,39 @@ const COST_PER_SECOND = 0.000111; // $0.40/hour
 
 const DEFAULT_MODEL = 'scribe_v2';
 
+/**
+ * Pauses before resending when ElevenLabs answers 429 "system_busy": its
+ * servers are overloaded, the request itself is fine and a retry normally succeeds.
+ */
+const BUSY_RETRY_DELAYS_MS = [2000, 5000];
+
+/** What each 429 code from ElevenLabs means — only the last is about request frequency. */
+const RATE_LIMIT_REASONS: Record<string, string> = {
+  system_busy: 'ElevenLabs is overloaded right now',
+  concurrent_limit_exceeded: 'ElevenLabs concurrency limit reached',
+  too_many_concurrent_requests: 'ElevenLabs concurrency limit reached',
+  rate_limit_exceeded: 'ElevenLabs rate limit reached',
+};
+
+/** Resolve after `ms`, or reject right away if the request is cancelled meanwhile. */
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    if (signal?.aborted) {
+      onAbort();
+    } else {
+      signal?.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
 export class ElevenLabsProvider implements STTProvider {
   readonly name: string;
   readonly id = 'elevenlabs';
@@ -61,25 +94,37 @@ export class ElevenLabsProvider implements STTProvider {
     const body = Buffer.concat(parts);
 
     let response: Response;
-    try {
-      response = await fetch(ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'xi-api-key': apiKey,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        },
-        body,
-        signal: options.signal,
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        response = await fetch(ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'xi-api-key': apiKey,
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          },
+          body,
+          signal: options.signal,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw error;
+        }
+        throw new Error('Unable to reach ElevenLabs — check your internet connection and try again');
       }
-      throw new Error('Unable to reach ElevenLabs — check your internet connection and try again');
-    }
+      if (response.ok) {
+        break;
+      }
 
-    if (!response.ok) {
-      throw new Error(await ElevenLabsProvider.formatHttpError(response));
+      const failure = await ElevenLabsProvider.readHttpError(response);
+      if (failure.code !== 'system_busy') {
+        throw new Error(failure.message);
+      }
+      const delay = BUSY_RETRY_DELAYS_MS[attempt - 1];
+      if (delay === undefined) {
+        throw new Error(`${failure.message} Tried ${attempt} times.`);
+      }
+      options.onRetry?.(failure.message, delay);
+      await wait(delay, options.signal);
     }
 
     const data = await response.json() as {
@@ -116,34 +161,46 @@ export class ElevenLabsProvider implements STTProvider {
     return (durationMs / 1000) * COST_PER_SECOND;
   }
 
-  private static async formatHttpError(response: Response): Promise<string> {
+  /** Read an error response into ElevenLabs' own error code and a user-facing message. */
+  private static async readHttpError(response: Response): Promise<{ code: string; message: string }> {
     const body = await response.text().catch(() => '');
     let detail = '';
-    let detailStatus = '';
+    let code = '';
     try {
       const json = JSON.parse(body);
       detail = json?.detail?.message || (typeof json?.detail === 'string' ? json.detail : '') || json?.error?.message || '';
-      detailStatus = json?.detail?.status || '';
+      // `code` in current API responses, `status` in older ones
+      code = json?.detail?.code || json?.detail?.status || '';
     } catch {
       detail = body.slice(0, 200);
     }
+    return { code, message: ElevenLabsProvider.formatHttpError(response.status, code, detail) };
+  }
 
-    switch (response.status) {
+  private static formatHttpError(status: number, code: string, detail: string): string {
+    switch (status) {
       case 401:
-        if (detailStatus === 'quota_exceeded') {
+        if (code === 'quota_exceeded') {
           return `ElevenLabs quota exceeded.${detail ? ' ' + detail : ''} Top up your balance at elevenlabs.io/billing.`;
         }
         return 'ElevenLabs API key is invalid or expired. Use "Code Dictator: Set API Key" to update it.';
       case 402:
         return 'ElevenLabs account has insufficient credits. Top up your balance at elevenlabs.io/billing.';
-      case 429:
-        return 'ElevenLabs rate limit reached. Please wait a moment and try again.';
+      case 429: {
+        // A 429 covers several different problems, so pass on ElevenLabs' own
+        // code and wording instead of always blaming the request rate.
+        const reason = RATE_LIMIT_REASONS[code] ?? 'ElevenLabs rate limit reached';
+        if (!code) {
+          return `${reason}. Please wait a moment and try again.`;
+        }
+        return `${reason} (${code}).${detail ? ' ' + detail : ''}`;
+      }
       case 500:
       case 502:
       case 503:
         return 'ElevenLabs service is temporarily unavailable. Please try again later.';
       default:
-        return `ElevenLabs API error (${response.status})${detail ? ': ' + detail : ''}`;
+        return `ElevenLabs API error (${status})${detail ? ': ' + detail : ''}`;
     }
   }
 

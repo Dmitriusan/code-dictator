@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import { StorageService } from './storage/StorageService';
+import { FailedRecordings, type FailedRecording } from './storage/FailedRecordings';
 import { StatusBar } from './ui/StatusBar';
 import { RecorderManager } from './recorder/RecorderManager';
 import type { AudioDiagnostics } from './recorder/NativeRecorder';
@@ -19,9 +21,10 @@ import { HoldModeController } from './recorder/HoldModeController';
 import { configureDiagnosticLog, diagLog, disposeDiagnosticLog } from './DiagnosticLog';
 import { playCompletionChime } from './ui/SoundPlayer';
 import { isHallucination, isSuspiciouslyShort } from './postprocess/HallucinationFilter';
-import type { TranscriptionResult } from './types';
+import type { AudioDataPayload, TranscriptionResult } from './types';
 
 let storageService: StorageService;
+let failedRecordings: FailedRecordings;
 let statusBar: StatusBar;
 let recorder: RecorderManager;
 let usageTracker: UsageTracker;
@@ -50,6 +53,7 @@ export function activate(context: vscode.ExtensionContext): void {
   storageService.migrateSettings().catch(() => { /* best-effort */ });
   configureDiagnosticLog(storageService.getSettings().diagnosticLogging);
   setCleanupLogger(diagLog);
+  failedRecordings = new FailedRecordings(path.join(context.globalStorageUri.fsPath, 'failed-recordings'));
   statusBar = new StatusBar();
   recorder = new RecorderManager(context.extensionUri);
   usageTracker = new UsageTracker(storageService);
@@ -201,6 +205,32 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('codeDictator.retryTranscription', async () => {
+      const saved = await failedRecordings.list();
+      if (saved.length === 0) {
+        vscode.window.showInformationMessage('Code Dictator: No failed recordings to retry.');
+        return;
+      }
+      let recording = saved[0];
+      if (saved.length > 1) {
+        const picked = await vscode.window.showQuickPick(
+          saved.map((r) => ({
+            label: `$(mic) ${new Date(r.savedAt).toLocaleString()}`,
+            description: `${Math.round(r.durationMs / 1000)}s`,
+            recording: r,
+          })),
+          { placeHolder: 'Select a recording to transcribe again' },
+        );
+        if (!picked) {
+          return;
+        }
+        recording = picked.recording;
+      }
+      await retryFailedRecording(recording);
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand('codeDictator.showUsage', () => {
       handleShowUsage();
     }),
@@ -324,6 +354,17 @@ async function handleStartRecording(): Promise<void> {
 }
 
 async function handleStopAndTranscribe(): Promise<void> {
+  await transcribeRecording(() => recorder.stopRecording());
+}
+
+/**
+ * Transcribe a recording, post-process the text and insert it. `retrying` is
+ * set when the audio is a recording kept by an earlier failed attempt.
+ */
+async function transcribeRecording(
+  getAudio: () => Promise<AudioDataPayload>,
+  retrying?: FailedRecording,
+): Promise<void> {
   const settings = storageService.getSettings();
 
   // Create an AbortController so the user can cancel transcription/cleanup via Escape
@@ -331,13 +372,13 @@ async function handleStopAndTranscribe(): Promise<void> {
   pipelineAbort = abort;
 
   try {
-    // Stop recording and get audio data
+    // Get the audio: stop the recording, or load the saved one being retried
     statusBar.updateState('transcribing');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
     vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', true);
 
-    const audioPayload = await recorder.stopRecording();
-    diagLog('Extension', `Recording stopped: ${Math.round(audioPayload.durationMs / 1000)}s, ${audioPayload.buffer.length} bytes, mime=${audioPayload.mimeType}`);
+    const audioPayload = await getAudio();
+    diagLog('Extension', `${retrying ? 'Retrying saved recording' : 'Recording stopped'}: ${Math.round(audioPayload.durationMs / 1000)}s, ${audioPayload.buffer.length} bytes, mime=${audioPayload.mimeType}`);
 
     // Guard against empty/too-short recordings (e.g. stale timer, device disconnect)
     const MIN_AUDIO_BYTES = 1000; // ~30ms of 16kHz 16-bit mono
@@ -373,11 +414,17 @@ async function handleStopAndTranscribe(): Promise<void> {
         prompt: whisperPrompt,
         mimeType: audioPayload.mimeType,
         signal: abort.signal,
+        onRetry: (reason, delayMs) => diagLog('STT', `${reason} Retrying in ${delayMs / 1000}s`),
       });
     } catch (error) {
       statusBar.updateState('idle');
+      if (isAbortError(error)) {
+        throw error; // Escape — reported as a cancellation below
+      }
       const message = error instanceof Error ? error.message : String(error);
-      vscode.window.showErrorMessage(`Code Dictator: Transcription failed — ${message}`);
+      diagLog('STT', `Transcription failed: ${message}`);
+      // Quota, rate-limit and network errors must not cost the user what they said
+      showTranscriptionFailed(message, retrying ?? await keepFailedRecording(audioPayload));
       return;
     }
     diagLog('STT', `Result: "${result.text}", language=${result.language ?? 'n/a'}, duration=${result.duration ?? 'n/a'}s, cost=${result.cost ?? 'n/a'}`);
@@ -388,6 +435,9 @@ async function handleStopAndTranscribe(): Promise<void> {
         diagLog('STT', `Hallucination filtered: "${result.text}"`);
       }
       statusBar.showTransientMessage('$(warning) No speech detected', 2000);
+      if (retrying) {
+        await failedRecordings.remove(retrying);
+      }
       return;
     }
 
@@ -453,6 +503,9 @@ async function handleStopAndTranscribe(): Promise<void> {
 
     // Track usage
     await usageTracker.record(result, provider.id, audioPayload.durationMs);
+    if (retrying) {
+      await failedRecordings.remove(retrying);
+    }
 
     // Update status bar
     statusBar.updateState('idle');
@@ -472,7 +525,7 @@ async function handleStopAndTranscribe(): Promise<void> {
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
     const message = error instanceof Error ? error.message : String(error);
     // Suppress error messages for user-initiated cancellations (AbortError from fetch)
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (isAbortError(error)) {
       diagLog('Extension', 'Pipeline cancelled by user');
       statusBar.showTransientMessage('$(x) Cancelled', 1500);
     } else if (!message.includes('cancelled')) {
@@ -481,6 +534,61 @@ async function handleStopAndTranscribe(): Promise<void> {
   } finally {
     pipelineAbort = null;
     vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', false);
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+/** Save audio whose transcription failed; undefined if even that fails. */
+async function keepFailedRecording(audio: AudioDataPayload): Promise<FailedRecording | undefined> {
+  try {
+    const saved = await failedRecordings.save(audio);
+    diagLog('Extension', `Kept failed recording for retry: ${saved.file}`);
+    return saved;
+  } catch (error) {
+    diagLog('Extension', 'Could not keep failed recording: ' + (error instanceof Error ? error.message : String(error)));
+    return undefined;
+  }
+}
+
+function showTranscriptionFailed(message: string, saved: FailedRecording | undefined): void {
+  const failure = `Code Dictator: Transcription failed — ${message}`;
+  if (!saved) {
+    vscode.window.showErrorMessage(failure);
+    return;
+  }
+  // Not awaited: the pipeline has to finish (so Alt+D works again) while the
+  // notification waits for a click.
+  vscode.window.showErrorMessage(
+    `${/[.!?]$/.test(failure) ? failure : failure + '.'} Your recording is saved: press Retry, or run "Code Dictator: Retry Failed Transcription" later.`,
+    'Retry',
+  ).then((choice) => {
+    if (choice === 'Retry') {
+      retryFailedRecording(saved);
+    }
+  });
+}
+
+/** Send a saved recording through the pipeline again, e.g. after a quota top-up. */
+async function retryFailedRecording(recording: FailedRecording): Promise<void> {
+  // pipelineAbort also covers hold mode, whose pipeline runs outside isTransitioning
+  if (recorder.isRecording || isTransitioning || pipelineAbort) {
+    vscode.window.showWarningMessage('Code Dictator: Another recording is in progress — retry when it is done. The failed one stays saved.');
+    return;
+  }
+  isTransitioning = true;
+  try {
+    await transcribeRecording(async () => {
+      const audio = await failedRecordings.read(recording);
+      if (!audio) {
+        throw new Error('This recording is no longer saved — it may already have been transcribed.');
+      }
+      return audio;
+    }, recording);
+  } finally {
+    isTransitioning = false;
   }
 }
 

@@ -1,17 +1,11 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import type { AudioIsolation, MessageFromWebview, MessageToWebview } from '../types';
+import type { AudioDataPayload, AudioIsolation, MessageFromWebview, MessageToWebview } from '../types';
 import { getRecorderWebviewContent } from './RecorderWebviewContent';
 import { NativeRecorder, type AudioDiagnostics } from './NativeRecorder';
 import { diagLog } from '../DiagnosticLog';
 
 type RecorderEvent = 'recordingStarted' | 'recordingStopped' | 'audioData' | 'error' | 'silenceDetected' | 'trackEnded';
-
-interface AudioDataPayload {
-  buffer: Buffer;
-  mimeType: string;
-  durationMs: number;
-}
 
 export class RecorderManager implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
