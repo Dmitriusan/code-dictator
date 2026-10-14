@@ -45,7 +45,7 @@ function makeSettings(overrides: Partial<CodeDictatorSettings> = {}): CodeDictat
     preferredLanguages: [],
     fillerRemoval: true,
     aiTextCleanup: false,
-    cleanupModel: 'gpt-4.1-nano',
+    cleanupModel: 'gpt-6-luna',
     codeAwareMode: true,
     defaultTarget: 'clipboard',
     autoCopyToClipboard: true,

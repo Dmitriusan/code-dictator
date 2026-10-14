@@ -417,5 +417,21 @@ describe('ElevenLabsProvider', () => {
       expect(bodyStr).toContain('model_id');
       expect(bodyStr).toContain('scribe_v2');
     });
+
+    it('sends scribe_v2 in place of the removed scribe_v1', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'test' }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new ElevenLabsProvider(async () => 'test-api-key-12345', 'scribe_v1');
+      await provider.transcribe(Buffer.from('audio'), {});
+
+      const bodyStr = (mockFetch.mock.calls[0][1].body as Buffer).toString();
+      expect(bodyStr).toContain('name="model_id"\r\n\r\nscribe_v2\r\n');
+      expect(bodyStr).not.toContain('scribe_v1');
+      expect(provider.name).toBe('ElevenLabs scribe_v2');
+    });
   });
 });

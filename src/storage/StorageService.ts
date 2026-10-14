@@ -108,7 +108,7 @@ export class StorageService {
       preferredLanguages: config.get<string[]>('preferredLanguages', []),
       fillerRemoval: config.get<boolean>('textProcessing.fillerRemoval', true),
       aiTextCleanup: config.get<boolean>('textProcessing.aiCleanup', false),
-      cleanupModel: config.get<string>('textProcessing.aiModel', 'gpt-4.1-nano'),
+      cleanupModel: config.get<string>('textProcessing.aiModel', 'gpt-6-luna'),
       codeAwareMode: config.get<boolean>('textProcessing.codeAware', true),
       defaultTarget: config.get<'clipboard' | 'editor'>('output.target', 'clipboard'),
       autoCopyToClipboard: config.get<boolean>('output.autoCopy', true),

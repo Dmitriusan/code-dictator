@@ -62,7 +62,7 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 
 | | ElevenLabs | OpenAI | Custom API |
 |---|---|---|---|
-| **Models** | Scribe v2, v1 | GPT-4o Transcribe, Whisper | Any Whisper-compatible |
+| **Models** | Scribe v2 | GPT-4o Transcribe, Whisper | Any Whisper-compatible |
 | **Accuracy** | Excellent | Very good (GPT-4o) / Good (Whisper) | Model-dependent |
 | **Languages** | 90+ | 57 | Varies |
 | **Free tier** | **Yes** (2.5 hrs/month) | No | N/A |
@@ -137,7 +137,7 @@ Settings are grouped into sections in the VS Code Settings UI.
 |---|---|---|
 | `textProcessing.codeAware` | `true` | Spoken-to-symbol conversion |
 | `textProcessing.aiCleanup` | `false` | LLM cleanup (requires OpenAI key) |
-| `textProcessing.aiModel` | `gpt-4.1-mini` | Model for text cleanup |
+| `textProcessing.aiModel` | `gpt-6-luna` | Model for text cleanup (`gpt-6-luna`, `gpt-6-sol`) |
 
 **Recording**
 

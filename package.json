@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for Claude Code, Copilot, Cline, or any AI chat in VS Code — 90+ languages, zero local dependencies, powered by ElevenLabs. Press Alt+D, talk, paste.",
-  "version": "1.1.19",
+  "version": "1.1.20",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -155,7 +155,6 @@
             "enum": [
               "auto",
               "scribe_v2",
-              "scribe_v1",
               "whisper-1",
               "gpt-4o-transcribe",
               "gpt-4o-mini-transcribe"
@@ -163,7 +162,6 @@
             "enumItemLabels": [
               "Auto (recommended)",
               "Scribe v2 (ElevenLabs)",
-              "Scribe v1 (ElevenLabs)",
               "Whisper (OpenAI)",
               "GPT-4o Transcribe (OpenAI)",
               "GPT-4o Mini Transcribe (OpenAI)"
@@ -171,7 +169,6 @@
             "enumDescriptions": [
               "Automatically uses the best model for your selected provider",
               "ElevenLabs' latest model — best accuracy, 90+ languages",
-              "ElevenLabs' previous generation model",
               "OpenAI's original Whisper model — good accuracy, 57 languages",
               "OpenAI's newest transcription model — higher accuracy, powered by GPT-4o",
               "OpenAI's efficient transcription model — good balance of speed and cost"
@@ -384,21 +381,18 @@
           "codeDictator.textProcessing.aiModel": {
             "order": 4,
             "type": "string",
-            "default": "gpt-4.1-mini",
+            "default": "gpt-6-luna",
             "enum": [
-              "gpt-4.1-nano",
-              "gpt-4.1-mini",
-              "gpt-4.1"
+              "gpt-6-luna",
+              "gpt-6-sol"
             ],
             "enumItemLabels": [
-              "Fast & Very Cheap",
-              "Balanced",
+              "Fast & Cheap",
               "Best Quality"
             ],
             "enumDescriptions": [
-              "gpt-4.1-nano — cheapest and fastest, good for basic cleanup",
-              "gpt-4.1-mini — better grammar and rephrasing, slightly higher cost",
-              "gpt-4.1 — most accurate cleanup, highest cost"
+              "gpt-6-luna — fast and cheap, good for everyday cleanup",
+              "gpt-6-sol — most accurate cleanup, about 20× the cost"
             ],
             "markdownDescription": "OpenAI model for AI text cleanup. Smaller models are cheaper and faster; larger models produce better results."
           }

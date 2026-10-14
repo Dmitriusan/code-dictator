@@ -82,7 +82,7 @@ function createMockStorage(overrides: Partial<Record<string, unknown>> = {}): St
       preferredLanguages: [],
       fillerRemoval: true,
       aiTextCleanup: false,
-      cleanupModel: 'gpt-4.1-nano',
+      cleanupModel: 'gpt-6-luna',
       codeAwareMode: true,
       defaultTarget: 'clipboard',
       autoCopyToClipboard: true,

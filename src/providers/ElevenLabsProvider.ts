@@ -5,6 +5,9 @@ const COST_PER_SECOND = 0.000111; // $0.40/hour
 
 const DEFAULT_MODEL = 'scribe_v2';
 
+/** ElevenLabs removed scribe_v1 on 2026-07-09; a setting saved with it gets scribe_v2. */
+const RETIRED_MODEL = 'scribe_v1';
+
 /**
  * Pauses before resending when ElevenLabs answers 429 "system_busy": its
  * servers are overloaded, the request itself is fine and a retry normally succeeds.
@@ -47,7 +50,7 @@ export class ElevenLabsProvider implements STTProvider {
     private readonly getApiKey: () => Promise<string | undefined>,
     model?: string,
   ) {
-    this.model = model || DEFAULT_MODEL;
+    this.model = !model || model === RETIRED_MODEL ? DEFAULT_MODEL : model;
     this.name = `ElevenLabs ${this.model}`;
   }
 

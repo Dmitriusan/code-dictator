@@ -49,7 +49,7 @@ describe('LLMCleanup.cleanup()', () => {
     });
     globalThis.fetch = mockFetch;
 
-    await cleanup('test text', 'sk-test-key', 'gpt-4.1-mini');
+    await cleanup('test text', 'sk-test-key', 'gpt-6-sol');
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const [url, options] = mockFetch.mock.calls[0];
@@ -59,8 +59,12 @@ describe('LLMCleanup.cleanup()', () => {
     expect(options.headers['Content-Type']).toBe('application/json');
 
     const body = JSON.parse(options.body);
-    expect(body.model).toBe('gpt-4.1-mini');
+    expect(body.model).toBe('gpt-6-sol');
+    // GPT-6 models take temperature 0 only with reasoning off, and reject max_tokens
+    expect(body.reasoning_effort).toBe('none');
     expect(body.temperature).toBe(0);
+    expect(body.max_completion_tokens).toBe(256);
+    expect(body).not.toHaveProperty('max_tokens');
     expect(body.messages).toHaveLength(2);
     expect(body.messages[0].role).toBe('system');
     expect(body.messages[1].role).toBe('user');
@@ -79,7 +83,29 @@ describe('LLMCleanup.cleanup()', () => {
     await cleanup('test', 'sk-test-key');
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.model).toBe('gpt-4.1-mini');
+    expect(body.model).toBe('gpt-6-luna');
+  });
+
+  it.each([
+    'gpt-4.1-nano',
+    'gpt-4.1-mini',
+    'gpt-4.1',
+    'gpt-4.1-mini-2025-04-14',
+    'gpt-4o',
+    'gpt-4o-mini-2024-07-18',
+  ])('sends gpt-6-luna in place of the retired %s', async (retired) => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'cleaned' } }],
+      }),
+    });
+    globalThis.fetch = mockFetch;
+
+    await cleanup('test', 'sk-test-key', retired);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.model).toBe('gpt-6-luna');
   });
 
   it('returns original text on API error (non-ok response)', async () => {
@@ -149,7 +175,7 @@ describe('LLMCleanup.cleanup()', () => {
     expect(result).toBe('cleaned text');
   });
 
-  it('sets max_tokens proportional to input length', async () => {
+  it('sets max_completion_tokens proportional to input length', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -161,10 +187,10 @@ describe('LLMCleanup.cleanup()', () => {
     await cleanup('a'.repeat(200), 'sk-test-key');
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.max_tokens).toBe(400); // 200 * 2
+    expect(body.max_completion_tokens).toBe(400); // 200 * 2
   });
 
-  it('sets minimum max_tokens of 256 for short input', async () => {
+  it('sets minimum max_completion_tokens of 256 for short input', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -176,7 +202,7 @@ describe('LLMCleanup.cleanup()', () => {
     await cleanup('hi', 'sk-test-key');
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.max_tokens).toBe(256); // Math.max(2*2, 256) = 256
+    expect(body.max_completion_tokens).toBe(256); // Math.max(2*2, 256) = 256
   });
 
   it('includes detected language in system prompt and user message', async () => {

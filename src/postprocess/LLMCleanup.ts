@@ -1,7 +1,14 @@
 import { LANGUAGES } from '../types';
 
 const OPENAI_CHAT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
-const DEFAULT_MODEL = 'gpt-4.1-mini';
+const DEFAULT_MODEL = 'gpt-6-luna';
+
+/**
+ * GPT-4.1 and GPT-4o, which OpenAI retires in favour of gpt-6-luna: gpt-4.1-nano
+ * on 2026-10-23, the rest on 2027-01-14. A setting saved with one of them would
+ * otherwise make every cleanup request fail.
+ */
+const RETIRED_MODEL = /^gpt-4(\.1|o)(-mini|-nano)?(-\d{4}-\d{2}-\d{2})?$/;
 
 // Optional diagnostic logger injected by the extension at startup.
 // Keeps this module free of vscode imports so it stays unit-testable.
@@ -216,7 +223,10 @@ export async function cleanup(
     return text;
   }
 
-  const requestModel = model || DEFAULT_MODEL;
+  const requestModel = !model || RETIRED_MODEL.test(model) ? DEFAULT_MODEL : model;
+  if (model && model !== requestModel) {
+    logFn?.('LLMCleanup', `${model} is retired, using ${requestModel}`);
+  }
 
   try {
     const systemPrompt = buildSystemPrompt(detectedLanguage, preferredLanguages);
@@ -236,8 +246,11 @@ export async function cleanup(
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
         ],
+        // Tidying needs no reasoning, which would only add latency. GPT-6 models
+        // also accept temperature 0 only with reasoning off, and reject max_tokens.
+        reasoning_effort: 'none',
         temperature: 0,
-        max_tokens: Math.max(text.length * 2, 256),
+        max_completion_tokens: Math.max(text.length * 2, 256),
       }),
       signal,
     });
