@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for Claude Code, Copilot, Cline, or any AI chat in VS Code — 90+ languages, powered by ElevenLabs. Press Alt+D, talk, paste.",
-  "version": "1.1.25",
+  "version": "1.1.26",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -155,23 +155,17 @@
             "enum": [
               "auto",
               "scribe_v2",
-              "whisper-1",
-              "gpt-4o-transcribe",
-              "gpt-4o-mini-transcribe"
+              "gpt-transcribe"
             ],
             "enumItemLabels": [
               "Auto (recommended)",
               "Scribe v2 (ElevenLabs)",
-              "Whisper (OpenAI)",
-              "GPT-4o Transcribe (OpenAI)",
-              "GPT-4o Mini Transcribe (OpenAI)"
+              "GPT Transcribe (OpenAI)"
             ],
             "enumDescriptions": [
               "Automatically uses the best model for your selected provider",
               "ElevenLabs' latest model — best accuracy, 90+ languages",
-              "OpenAI's original Whisper model — good accuracy, 57 languages",
-              "OpenAI's newest transcription model — higher accuracy, powered by GPT-4o",
-              "OpenAI's efficient transcription model — good balance of speed and cost"
+              "OpenAI's recommended transcription model — detects the spoken language"
             ],
             "description": "Speech-to-text model. \"Auto\" selects the best model for your provider."
           },

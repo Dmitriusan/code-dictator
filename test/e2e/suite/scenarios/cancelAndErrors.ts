@@ -192,7 +192,7 @@ export const notConfiguredGuard: Scenario = async (ctx) => {
   await useMockProvider(h, { 'output.target': 'editor' });
   await openFile(ctx, 'guard.txt', '');
   const variants: { settings: Record<string, unknown>; name: string }[] = [
-    { settings: { provider: 'openai' }, name: 'OpenAI whisper-1' },
+    { settings: { provider: 'openai' }, name: 'OpenAI gpt-transcribe' },
     { settings: { provider: 'elevenlabs' }, name: 'ElevenLabs scribe_v2' },
     { settings: { provider: 'custom', customApiUrl: '' }, name: 'Custom Whisper-Compatible' },
     { settings: { provider: 'custom', customApiUrl: 'ftp://x' }, name: 'Custom Whisper-Compatible' },

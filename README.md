@@ -70,8 +70,8 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 
 | | ElevenLabs | OpenAI | Custom API |
 |---|---|---|---|
-| **Models** | Scribe v2 | GPT-4o Transcribe, Whisper | Any Whisper-compatible |
-| **Accuracy** | Excellent | Very good (GPT-4o) / Good (Whisper) | Model-dependent |
+| **Models** | Scribe v2 | GPT Transcribe | Any Whisper-compatible |
+| **Accuracy** | Excellent | Very good | Model-dependent |
 | **Languages** | 90+ | 57 | Varies |
 | **Free tier** | **Yes** (2.5 hrs/month) | No | N/A |
 | **Latency** | ~1-2s | ~1-3s | Varies |
@@ -92,7 +92,7 @@ Code Dictator is **free and open-source**. You only pay for the speech-to-text A
 | Provider | Cost |
 |---|---|
 | ElevenLabs | **Free tier** (2.5 hrs/month), then ~$0.40/hr |
-| OpenAI Whisper | See [OpenAI pricing](https://openai.com/api/pricing/) |
+| OpenAI | See [OpenAI pricing](https://openai.com/api/pricing/) |
 | Custom / Local | Free |
 
 Most developers stay comfortably within the free tier.
@@ -135,7 +135,7 @@ Settings are grouped into sections in the VS Code Settings UI.
 | Setting | Default | Description |
 |---|---|---|
 | `provider` | `elevenlabs` | `elevenlabs`, `openai`, `custom` |
-| `voiceModel` | `auto` | STT model (`auto`, `scribe_v2`, `whisper-1`, `gpt-4o-transcribe`, etc.) |
+| `voiceModel` | `auto` | STT model (`auto`, `scribe_v2`, `gpt-transcribe`) |
 | `language` | *(auto)* | Language code or auto-detect |
 | `preferredLanguages` | `[]` | Shortlist for quick switching |
 

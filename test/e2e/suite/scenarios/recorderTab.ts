@@ -154,7 +154,7 @@ export const recorderTabRepeatAndErrors: Scenario = async (ctx) => {
   await toggle();
   await sleep(100);
   const unconfigured = notes(h.ui.notifications(t));
-  expect(show(unconfigured) === show(['error: Code Dictator: OpenAI whisper-1 is not configured. Please set your API key. [Set API Key, Open Settings]']), `no API key: ${show(unconfigured)}`);
+  expect(show(unconfigured) === show(['error: Code Dictator: OpenAI gpt-transcribe is not configured. Please set your API key. [Set API Key, Open Settings]']), `no API key: ${show(unconfigured)}`);
   step('no API key');
   await h.configure({ provider: 'custom' });
 

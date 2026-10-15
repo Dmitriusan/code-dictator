@@ -13,8 +13,8 @@ describe('OpenAIProvider', () => {
     it('estimates cost for 60 seconds correctly', () => {
       const provider = new OpenAIProvider(async () => 'sk-test');
       const cost = provider.estimateCost(60000);
-      // 60s * $0.0001/s = $0.006
-      expect(cost).toBeCloseTo(0.006, 4);
+      // 60s * $0.000075/s = $0.0045
+      expect(cost).toBeCloseTo(0.0045, 4);
     });
 
     it('estimates cost for 0 duration', () => {
@@ -25,14 +25,14 @@ describe('OpenAIProvider', () => {
     it('estimates cost for 1 second', () => {
       const provider = new OpenAIProvider(async () => 'sk-test');
       const cost = provider.estimateCost(1000);
-      expect(cost).toBeCloseTo(0.0001, 6);
+      expect(cost).toBeCloseTo(0.000075, 6);
     });
 
     it('estimates cost for 1 hour', () => {
       const provider = new OpenAIProvider(async () => 'sk-test');
       const cost = provider.estimateCost(3600000);
-      // 3600s * $0.0001/s = $0.36
-      expect(cost).toBeCloseTo(0.36, 3);
+      // 3600s * $0.000075/s = $0.27
+      expect(cost).toBeCloseTo(0.27, 3);
     });
   });
 
@@ -107,7 +107,7 @@ describe('OpenAIProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
-    it('includes language when specified', async () => {
+    it('sends the language as languages[], which gpt-transcribe takes instead of language', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ text: 'bonjour' }),
@@ -119,8 +119,8 @@ describe('OpenAIProvider', () => {
 
       const bodyBuffer = mockFetch.mock.calls[0][1].body as Buffer;
       const bodyStr = bodyBuffer.toString();
-      expect(bodyStr).toContain('name="language"');
-      expect(bodyStr).toContain('fr');
+      expect(bodyStr).toContain('name="languages[]"\r\n\r\nfr\r\n');
+      expect(bodyStr).not.toContain('name="language"');
     });
 
     it('does not include language when not specified', async () => {
@@ -135,7 +135,7 @@ describe('OpenAIProvider', () => {
 
       const bodyBuffer = mockFetch.mock.calls[0][1].body as Buffer;
       const bodyStr = bodyBuffer.toString();
-      expect(bodyStr).not.toContain('name="language"');
+      expect(bodyStr).not.toContain('name="language');
     });
 
     it('includes prompt when specified', async () => {
@@ -171,7 +171,7 @@ describe('OpenAIProvider', () => {
       expect(bodyStr).not.toContain('name="prompt"');
     });
 
-    it('includes whisper-1 model in request', async () => {
+    it('uses gpt-transcribe by default', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ text: 'test' }),
@@ -183,10 +183,32 @@ describe('OpenAIProvider', () => {
 
       const bodyBuffer = mockFetch.mock.calls[0][1].body as Buffer;
       const bodyStr = bodyBuffer.toString();
-      expect(bodyStr).toContain('whisper-1');
+      expect(bodyStr).toContain('name="model"\r\n\r\ngpt-transcribe\r\n');
+      expect(provider.name).toBe('OpenAI gpt-transcribe');
     });
 
-    it('requests verbose_json response format for language detection', async () => {
+    it.each([
+      'whisper-1',
+      'gpt-4o-transcribe',
+      'gpt-4o-mini-transcribe',
+      'gpt-4o-mini-transcribe-2025-12-15',
+      'gpt-4o-transcribe-diarize',
+    ])('sends gpt-transcribe in place of the retired %s', async (retired) => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'test' }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key', retired);
+      await provider.transcribe(Buffer.from('audio'), {});
+
+      const bodyStr = (mockFetch.mock.calls[0][1].body as Buffer).toString();
+      expect(bodyStr).toContain('name="model"\r\n\r\ngpt-transcribe\r\n');
+      expect(bodyStr).not.toContain(retired);
+    });
+
+    it('requests the json response format, as gpt-transcribe rejects verbose_json', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ text: 'test' }),
@@ -197,13 +219,17 @@ describe('OpenAIProvider', () => {
       await provider.transcribe(Buffer.from('audio'), {});
 
       const bodyStr = (mockFetch.mock.calls[0][1].body as Buffer).toString();
-      expect(bodyStr).toContain('verbose_json');
+      expect(bodyStr).toContain('name="response_format"\r\n\r\njson\r\n');
     });
 
-    it('returns detected language from verbose_json response', async () => {
+    it('returns the detected language code and the billed duration', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ text: 'bonjour', language: 'fr', duration: 2.5 }),
+        json: async () => ({
+          text: 'bonjour',
+          languages: [{ code: 'fr' }],
+          usage: { type: 'duration', seconds: 3 },
+        }),
       });
       globalThis.fetch = mockFetch;
 
@@ -211,21 +237,34 @@ describe('OpenAIProvider', () => {
       const result = await provider.transcribe(Buffer.from('audio'), {});
 
       expect(result.language).toBe('fr');
-      expect(result.duration).toBe(2.5);
+      expect(result.duration).toBe(3);
     });
 
-    it('uses duration from verbose_json for cost estimation', async () => {
+    it('leaves the language unset when none was detected', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ text: 'test', duration: 30 }),
+        json: async () => ({ text: 'hmm', languages: [] }),
       });
       globalThis.fetch = mockFetch;
 
       const provider = new OpenAIProvider(async () => 'sk-test-key');
       const result = await provider.transcribe(Buffer.from('audio'), {});
 
-      // 30s * $0.0001/s = $0.003
-      expect(result.cost).toBeCloseTo(0.003, 4);
+      expect(result.language).toBeUndefined();
+    });
+
+    it('uses the billed duration for cost estimation', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'test', usage: { type: 'duration', seconds: 30 } }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const provider = new OpenAIProvider(async () => 'sk-test-key');
+      const result = await provider.transcribe(Buffer.from('audio'), {});
+
+      // 30s * $0.000075/s = $0.00225
+      expect(result.cost).toBeCloseTo(0.00225, 5);
     });
 
     it('throws user-friendly message on 401 (invalid key)', async () => {

@@ -1,9 +1,16 @@
 import type { STTProvider, TranscribeOptions, TranscriptionResult } from '../types';
 
 const ENDPOINT = 'https://api.openai.com/v1/audio/transcriptions';
-const COST_PER_SECOND = 0.0001; // $0.006/minute
+const COST_PER_SECOND = 0.000075; // $0.0045/minute
 
-const DEFAULT_MODEL = 'whisper-1';
+const DEFAULT_MODEL = 'gpt-transcribe';
+
+/**
+ * Whisper and the GPT-4o transcription models, which OpenAI shuts down on
+ * 2027-02-26 in favour of gpt-transcribe. A setting saved with one of them
+ * gets gpt-transcribe instead of failing.
+ */
+const RETIRED_MODEL = /^(whisper-1$|gpt-4o(-mini)?-transcribe)/;
 
 export class OpenAIProvider implements STTProvider {
   readonly name: string;
@@ -14,7 +21,7 @@ export class OpenAIProvider implements STTProvider {
     private readonly getApiKey: () => Promise<string | undefined>,
     model?: string,
   ) {
-    this.model = model || DEFAULT_MODEL;
+    this.model = !model || RETIRED_MODEL.test(model) ? DEFAULT_MODEL : model;
     this.name = `OpenAI ${this.model}`;
   }
 
@@ -47,26 +54,25 @@ export class OpenAIProvider implements STTProvider {
       `${this.model}\r\n`
     ));
 
-    // verbose_json returns language + duration alongside text, but newer
-    // models (gpt-4o-transcribe, etc.) only support 'json' or 'text'
-    const supportsVerbose = this.model.startsWith('whisper');
-    const responseFormat = supportsVerbose ? 'verbose_json' : 'json';
+    // gpt-transcribe rejects verbose_json; its json reply still carries the
+    // detected languages and the billed duration
     parts.push(Buffer.from(
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="response_format"\r\n\r\n` +
-      `${responseFormat}\r\n`
+      `json\r\n`
     ));
 
-    // language field (optional)
+    // languages[] field (optional) — gpt-transcribe takes a list of expected
+    // languages in place of the single language field
     if (options.language) {
       parts.push(Buffer.from(
         `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="language"\r\n\r\n` +
+        `Content-Disposition: form-data; name="languages[]"\r\n\r\n` +
         `${options.language}\r\n`
       ));
     }
 
-    // prompt field (optional) — guides Whisper toward expected vocabulary/style
+    // prompt field (optional) — context about the recording's vocabulary
     if (options.prompt) {
       parts.push(Buffer.from(
         `--${boundary}\r\n` +
@@ -101,19 +107,24 @@ export class OpenAIProvider implements STTProvider {
       throw new Error(await OpenAIProvider.formatHttpError(response));
     }
 
-    const data = await response.json() as { text?: string; language?: string; duration?: number };
+    const data = await response.json() as {
+      text?: string;
+      languages?: Array<{ code?: string }>;
+      usage?: { seconds?: number };
+    };
 
     if (data.text === undefined) {
       throw new Error('OpenAI returned an unexpected response format');
     }
 
-    const durationSec = data.duration ?? (audio.length / 16000);
+    const duration = data.usage?.seconds;
+    const durationSec = duration ?? (audio.length / 16000);
     const cost = durationSec * COST_PER_SECOND;
 
     return {
       text: data.text,
-      language: data.language,
-      duration: data.duration,
+      language: data.languages?.[0]?.code,
+      duration,
       cost,
     };
   }
