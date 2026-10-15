@@ -176,21 +176,21 @@ Without this gate, pressing the dictation key and pausing to think (a common pat
 
 ## Platform Notes
 
-Code Dictator uses a two-tier recording architecture. The silence detection approach differs between tiers:
+Code Dictator records with a tool on the user's system, because VS Code does not give extensions' web views access to the microphone. The WebView recorder is only tried when no such tool is installed. The silence detection approach differs between the two paths:
 
-### WebView Recorder (macOS, Windows — primary on all platforms)
+### Native Recorder
 
-The primary recording path uses a hidden WebView with the browser's MediaRecorder API. Silence detection here leverages the Web Audio API's `AnalyserNode`, which provides frequency-domain data via `getByteFrequencyData()`. The average spectral energy across all frequency bins is compared against a fixed threshold. This works well because the browser's audio pipeline applies its own gain normalization, making the input levels relatively consistent across microphones.
+On Linux the extension prefers `parecord` / `pw-record` (PulseAudio/PipeWire, so Bluetooth mics route correctly) over `arecord` (ALSA). On macOS it records with SoX (`rec` / `sox`) and on Windows with ffmpeg.
 
-### Native Recorder (Linux fallback, macOS/Windows fallback)
-
-On Linux, where WebView microphone permissions are frequently sandboxed by the desktop environment (Wayland compositors, Snap/Flatpak confinement), the extension falls back to a native recorder, preferring `parecord` / `pw-record` (PulseAudio/PipeWire, so Bluetooth mics route correctly) over `arecord` (ALSA). On macOS and Windows, `sox`/`rec` serves as the fallback if WebView recording fails for any reason.
-
-When using the native recorder with silence detection enabled, `arecord`/`parecord` is launched in raw PCM stdout-pipe mode (`-t raw -` / `--raw`) rather than writing directly to a WAV file. The extension host process reads the PCM stream, writes it to disk with a WAV header, and simultaneously feeds each chunk to the adaptive VAD described in this document. The WAV header is written with a placeholder data size and patched with the correct size when recording stops. (`pw-record` cannot stream to stdout, so it always writes to a file and silence detection is unavailable with it.)
+Silence detection needs the audio as a stream, so it works with `parecord` and `arecord` only. With silence detection enabled, `arecord`/`parecord` is launched in raw PCM stdout-pipe mode (`-t raw -` / `--raw`) rather than writing directly to a WAV file. The extension host process reads the PCM stream, writes it to disk with a WAV header, and simultaneously feeds each chunk to the adaptive VAD described in this document. The WAV header is written with a placeholder data size and patched with the correct size when recording stops. `pw-record`, SoX and ffmpeg always write to a file, so silence detection is unavailable with them.
 
 To avoid PulseAudio/PipeWire dropping the tail of a recording, `parecord` is launched with `--latency-msec=100`, which caps the capture buffer; otherwise the last 1–2 seconds are lost when the process is signalled to stop.
 
 This architecture means the adaptive VAD runs in the Node.js extension host process, operating on time-domain PCM samples — a fundamentally different signal path from the WebView's frequency-domain approach. The dBFS/EMA model described here was designed specifically for this raw PCM path, where no browser-level gain normalization occurs and the full dynamic range of the input device is preserved.
+
+### WebView Recorder (last resort)
+
+The WebView recorder uses the browser's MediaRecorder API. VS Code desktop refuses it the microphone, so when no native tool is installed the start fails with a message naming the tool to install. In a host that does grant the microphone, silence detection leverages the Web Audio API's `AnalyserNode`, which provides frequency-domain data via `getByteFrequencyData()`. The average spectral energy across all frequency bins is compared against a fixed threshold. This works well because the browser's audio pipeline applies its own gain normalization, making the input levels relatively consistent across microphones.
 
 ---
 

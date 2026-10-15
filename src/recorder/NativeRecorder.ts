@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { diagLog } from '../DiagnosticLog';
+import { NoRecorderError } from './NoRecorderError';
 
 export interface AudioDiagnostics {
   /** Human-readable explanation of why audio capture failed */
@@ -192,7 +193,8 @@ export class NativeRecorder {
 
     const tool = NativeRecorder.detectTool();
     if (!tool) {
-      throw new Error('No native recording tool found (ffmpeg, arecord, or sox). On Windows, install ffmpeg: winget install Gyan.FFmpeg');
+      diagLog('NativeRecorder', 'No native recording tool found');
+      throw new NoRecorderError();
     }
 
     this.silenceTimeout = silenceTimeout;
@@ -280,10 +282,15 @@ export class NativeRecorder {
           if (!settled && !this._isRecording) {
             // Process exited during startup (before the 150ms timer)
             settled = true;
-            diagLog('NativeRecorder', `Process exited during startup. code=${code}, signal=${signal}, stderr=${this.stderrData.trim()}`);
+            // cleanup() clears stderrData, so read it first. The log gets all of
+            // it, the error only its end.
+            const stderr = this.stderrData.trim();
+            diagLog('NativeRecorder', `Process exited during startup. code=${code}, signal=${signal}, stderr=${stderr}`);
             this.deleteTempFile();
             this.cleanup();
-            reject(new Error(`Recording process exited immediately (code=${code}). ${this.stderrData.trim()}`));
+            const message = `Recording process exited immediately (code=${code}).`;
+            const reason = stderrTail(stderr);
+            reject(new Error(reason ? `${message} ${reason}` : message));
             return;
           }
           if (this._isRecording && !this.stoppingGracefully) {
@@ -733,6 +740,23 @@ function createWavHeader(): Buffer {
   header.writeUInt32LE(maxDataSize, 40);
 
   return header;
+}
+
+/** The most characters of a recorder's stderr that go into an error message. */
+const STDERR_TAIL_LENGTH = 300;
+
+/**
+ * The end of a recorder's stderr as one short line for an error message. A
+ * recorder says why it gave up last, after any banner (ffmpeg prints its build
+ * configuration first), so a text that is too long is cut from the front.
+ * Line breaks, tabs and other control characters become single spaces.
+ */
+function stderrTail(stderr: string): string {
+  const line = stderr.replace(/[\s\u0000-\u001f\u007f-\u009f]+/g, ' ').trim();
+  if (line.length <= STDERR_TAIL_LENGTH) {
+    return line;
+  }
+  return `…${line.slice(1 - STDERR_TAIL_LENGTH)}`;
 }
 
 function isExecutable(filePath: string): boolean {

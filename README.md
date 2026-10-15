@@ -14,7 +14,7 @@ Press `Alt+D`. Speak. Press `Alt+D` again. Paste. Done.
 
 ![Code Dictator in action](resources/demo.gif)
 
-Your words are transcribed in seconds, ready to paste into any AI chat, terminal, or editor. No browser extensions. No microphone setup. No dependencies to install. Just your voice and your code.
+Your words are transcribed in seconds, ready to paste into any AI chat, terminal, or editor. No browser extensions. Just your voice and your code.
 
 **Dictate in your language — not just English.** With ElevenLabs, transcription is accurate across 90+ languages — European and others — so non-English speakers get clean results too, not a watered-down, English-first experience.
 
@@ -26,7 +26,17 @@ Your words are transcribed in seconds, ready to paste into any AI chat, terminal
 2. **Get a free API key** from [ElevenLabs](https://try.elevenlabs.io/rgoomc9z8dvv) — sign up, find **Developers** (bottom of the left panel) → **API Keys** → **Create API Key**
 3. **Press `Alt+D`**, speak your prompt, press `Alt+D` again, and **paste** into any AI chat
 
-That's it. Your voice → clipboard → wherever you need it.
+Your voice → clipboard → wherever you need it.
+
+### Requirements
+
+Recording uses a small tool on your system. Install it once if you don't have one:
+
+- **Linux:** nothing to install — it uses `parecord`, `pw-record` or `arecord`, preinstalled on most desktop distros
+- **macOS:** `brew install sox`
+- **Windows:** `winget install Gyan.FFmpeg`
+
+If the tool is missing, Code Dictator tells you what to install the first time you press `Alt+D`.
 
 ---
 
@@ -50,10 +60,8 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 | **Speaks your language** | Accurate speech-to-text in 90+ languages with ElevenLabs — not just English. Auto-detected; switch with one click. |
 | **Code-aware mode** | Say "open paren" and get `(`. 50+ symbol mappings. |
 | **AI text cleanup** | Optional LLM pass removes filler words and fixes grammar |
-| **Noise reduction** | Built-in audio isolation — basic or aggressive |
 | **Cost tracking** | See your spend in the status bar. Know exactly what you're paying. |
-| **Zero dependencies** | No native binaries — no sox, no ffmpeg, no Python. Just install and go. |
-| **Cross-platform** | macOS, Windows, Linux. Native fallback on each. |
+| **Cross-platform** | macOS, Windows, Linux. Records with a system tool on each — see [Requirements](#requirements). |
 | **Privacy-first** | No telemetry. No data collection. API keys in your OS keychain. |
 
 ---
@@ -144,9 +152,8 @@ Settings are grouped into sections in the VS Code Settings UI.
 | Setting | Default | Description |
 |---|---|---|
 | `recording.mode` | `toggle` | `toggle` or `hold` |
-| `recording.audioIsolation` | `basic` | `off`, `basic`, `aggressive` |
 | `recording.maxDuration` | `300` | Max seconds (10-3600) |
-| `recording.silenceTimeout` | `0` | Auto-stop on silence (0 = off) |
+| `recording.silenceTimeout` | `0` | Auto-stop on silence (0 = off; needs `parecord` or `arecord` on Linux) |
 
 **Output**
 
@@ -168,9 +175,9 @@ All settings under the `codeDictator.*` namespace.
 
 ## How It Works
 
-Code Dictator records via the browser's MediaRecorder API in a hidden WebView — zero native dependencies on macOS and Windows. On Linux, if WebView mic permissions are sandboxed, it falls back to a native recorder, auto-detecting your audio stack: `parecord` / `pw-record` (PulseAudio/PipeWire — so Bluetooth mics work) or `arecord` (ALSA), all pre-installed on most distros. You don't configure anything; it just works.
+Code Dictator records with a tool on your system, because VS Code does not give extensions' web views access to the microphone ([microsoft/vscode#113916](https://github.com/microsoft/vscode/issues/113916)). It auto-detects what is installed: `parecord` / `pw-record` (PulseAudio/PipeWire — so Bluetooth mics work) or `arecord` (ALSA) on Linux, SoX on macOS, ffmpeg on Windows. You don't configure anything: once a tool is installed (see [Requirements](#requirements)), it just works.
 
-**Adaptive silence detection** (when enabled) uses dual exponential moving averages to track your noise floor and speech energy in real-time. No calibration needed — it adapts to your microphone and environment automatically. See the [technical reference](docs/voice-activity-detection.md) for details.
+**Adaptive silence detection** (when enabled; on Linux with `parecord` or `arecord`) uses dual exponential moving averages to track your noise floor and speech energy in real-time. No calibration needed — it adapts to your microphone and environment automatically. See the [technical reference](docs/voice-activity-detection.md) for details.
 
 ---
 
@@ -188,9 +195,10 @@ For deeper cleanup (rephrasing, grammar), enable **AI text cleanup** which uses 
 VS Code's Extension API does not allow extensions to inject buttons, icons, or any custom UI into another extension's chat panel. Each extension's views are sandboxed — there is no API for a third-party extension to modify the Claude, Copilot, or any other chat interface. This is a VS Code platform limitation, not something any extension can work around. The keyboard shortcut (`Alt+D`) and the status bar microphone button work universally across all contexts — click into the chat input, press `Alt+D`, speak, and paste. No in-panel button needed.
 
 **Microphone not detected**
-- macOS: System Settings → Privacy & Security → Microphone → enable VS Code
-- Windows: Settings → Privacy → Microphone → allow app access
-- Linux: Check PulseAudio/PipeWire with `pavucontrol`
+Check that a recording tool is installed and that your system lets VS Code use the microphone.
+- macOS: `brew install sox`, then System Settings → Privacy & Security → Microphone → enable VS Code
+- Windows: `winget install Gyan.FFmpeg`, then Settings → Privacy & security → Microphone → turn on "Let desktop apps access your microphone"
+- Linux: you need one of `parecord`, `pw-record` or `arecord` (Debian/Ubuntu packages `pulseaudio-utils`, `pipewire-bin`, `alsa-utils`). Check the input device with `pavucontrol`
 
 **Recording fails in Remote / SSH / WSL**
 Voice input requires a local VS Code window. Remote environments don't expose microphone access to extensions.

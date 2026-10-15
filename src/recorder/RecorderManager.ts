@@ -3,16 +3,10 @@ import * as crypto from 'crypto';
 import type { AudioDataPayload, AudioIsolation, MessageFromWebview, MessageToWebview } from '../types';
 import { getRecorderWebviewContent, MIC_PERMISSION_DENIED } from './RecorderWebviewContent';
 import { NativeRecorder, type AudioDiagnostics } from './NativeRecorder';
+import { NoRecorderError } from './NoRecorderError';
 import { diagLog } from '../DiagnosticLog';
 
 type RecorderEvent = 'recordingStarted' | 'recordingStopped' | 'audioData' | 'error' | 'silenceDetected' | 'trackEnded';
-
-/** The error a start reports when neither recorder can capture audio. */
-function microphoneUnavailable(reason: string): Error {
-  return new Error(
-    `Microphone unavailable: ${reason}. Please check your audio devices, or install ffmpeg (Windows: winget install Gyan.FFmpeg) / arecord (Linux) / sox (macOS).`
-  );
-}
 
 export class RecorderManager implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
@@ -107,9 +101,9 @@ export class RecorderManager implements vscode.Disposable {
     }
 
     if (this.webviewMicDenied) {
-      diagLog('RecorderManager', 'No native recorder found, skipping webview recorder (refused the microphone earlier in this window)');
+      diagLog('RecorderManager', `No native recorder found, skipping webview recorder (refused the microphone earlier in this window: ${MIC_PERMISSION_DENIED})`);
       this._isRecording = false;
-      throw microphoneUnavailable(MIC_PERMISSION_DENIED);
+      throw new NoRecorderError();
     }
 
     // Last resort: webview MediaRecorder
@@ -164,7 +158,8 @@ export class RecorderManager implements vscode.Disposable {
         this.webviewMicDenied = true;
       }
 
-      throw microphoneUnavailable(errorMsg);
+      // The webview's reason stays in the log: users are told what to install instead
+      throw new NoRecorderError();
     }
   }
 

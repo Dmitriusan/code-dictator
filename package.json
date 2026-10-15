@@ -1,8 +1,8 @@
 {
   "name": "code-dictator",
   "displayName": "Code Dictator",
-  "description": "Voice dictation for Claude Code, Copilot, Cline, or any AI chat in VS Code — 90+ languages, zero local dependencies, powered by ElevenLabs. Press Alt+D, talk, paste.",
-  "version": "1.1.22",
+  "description": "Voice dictation for Claude Code, Copilot, Cline, or any AI chat in VS Code — 90+ languages, powered by ElevenLabs. Press Alt+D, talk, paste.",
+  "version": "1.1.23",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -424,12 +424,9 @@
               "basic",
               "aggressive"
             ],
-            "enumDescriptions": [
-              "No noise reduction — raw audio",
-              "Browser-native noise suppression and echo cancellation",
-              "Additional filtering (high-pass, low-pass, compressor)"
-            ],
-            "description": "Audio noise reduction level"
+            "description": "Deprecated: this setting has no effect.",
+            "deprecationMessage": "This setting has no effect. It only applied to the in-editor recorder, which VS Code does not let use the microphone, so Code Dictator records with a tool on your system instead.",
+            "markdownDeprecationMessage": "**Deprecated:** this setting has no effect. It only applied to the in-editor recorder, which VS Code does not let use the microphone, so Code Dictator records with a tool on your system instead."
           },
           "codeDictator.recording.silenceTimeout": {
             "order": 3,
@@ -437,7 +434,7 @@
             "default": 0,
             "minimum": 0,
             "maximum": 60,
-            "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Works with the webview recorder and the native `arecord`/`parecord` recorders. It is unavailable with the `pw-record` recorder (which can't stream audio for live analysis) — use `recording.maxDuration` instead in that case.*\n\n*Silence detection may not work reliably in noisy environments or with background music — consider using `recording.maxDuration` as a fallback in those situations.*"
+            "markdownDescription": "Auto-stop recording after N seconds of silence (0 = disabled).\n\n*Note: Works with the `parecord` and `arecord` recorders (Linux). It has no effect with `pw-record`, SoX (macOS) or ffmpeg (Windows), which don't stream audio for live analysis — use `recording.maxDuration` instead in that case.*\n\n*Silence detection may not work reliably in noisy environments or with background music — consider using `recording.maxDuration` as a fallback in those situations.*"
           },
           "codeDictator.recording.maxDuration": {
             "order": 4,

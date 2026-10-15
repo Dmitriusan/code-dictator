@@ -5,6 +5,7 @@ import { activeEditorName, allTabs, describeRecorderTab, isRecorderTab, tabInfos
 import {
   MIC_CANCELLED,
   MIC_IDLE,
+  NO_RECORDER_NOTE,
   RETRY,
   baseName,
   cancel,
@@ -141,7 +142,7 @@ export const recorderTabRepeatAndErrors: Scenario = async (ctx) => {
   const tNoRecorder = clock();
   await toggle();
   const noRecorder = notes(h.ui.notifications(tNoRecorder));
-  expect(noRecorder.length === 1 && noRecorder[0].startsWith('error: Code Dictator: Failed to start recording — Microphone unavailable:'), `no recorder: ${show(noRecorder)}`);
+  expect(show(noRecorder) === show([`error: ${NO_RECORDER_NOTE}`]), `no recorder: ${show(noRecorder)}`);
   await sleep(300);
   const tNoRecorderEnd = clock();
   step('no recorder');
@@ -178,7 +179,7 @@ export const noRecorderAvailable: Scenario = async (ctx) => {
     const t = clock();
     await toggle();
     const error = await waitFor(`attempt ${attempt}: the error`, () => h.ui.notifications(t, 'error')[0], 6000).catch(() => undefined);
-    expect(error?.text.startsWith('Code Dictator: Failed to start recording — Microphone unavailable:'), `attempt ${attempt}: ${show(notes(h.ui.notifications(t)))}`);
+    expect(error?.text === NO_RECORDER_NOTE && error.items.length === 0, `attempt ${attempt}: ${show(notes(h.ui.notifications(t)))}`);
     expect(show(h.commands.contextValues('isRecording', t)) === show([true, false]), `attempt ${attempt}: isRecording ${show(h.commands.contextValues('isRecording', t))}`);
     expect(h.statusBar.micText() === MIC_IDLE, `attempt ${attempt}: mic ${show(h.statusBar.micText())}`);
     await sleep(300);

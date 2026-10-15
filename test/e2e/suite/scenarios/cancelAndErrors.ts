@@ -222,7 +222,7 @@ export const notConfiguredGuard: Scenario = async (ctx) => {
     .catch(() => expect(false, '"Set API Key" did not open the setup wizard'));
 };
 
-/** The recorder dies mid-recording, or right at startup (known issue: its stderr is dropped from the message). */
+/** The recorder dies mid-recording, or right at startup (the error then carries the recorder's stderr). */
 export const recorderExitErrors: Scenario = async (ctx) => {
   const { h, expect } = ctx;
   await useMockProvider(h, { 'output.target': 'editor' });
@@ -250,10 +250,10 @@ export const recorderExitErrors: Scenario = async (ctx) => {
   await toggle();
   const error = await waitFor('the startup error', () => h.ui.notifications(t, 'error')[0], 3000);
   expect(h.fakes.startsSince(m0).length === 1, `${h.fakes.startsSince(m0).length} recorder starts`);
-  expect(error.text.startsWith('Code Dictator: Failed to start recording — Recording process exited immediately (code=1).'), `startup exit: ${show(error.text)}`);
+  expect(error.text === 'Code Dictator: Failed to start recording — Recording process exited immediately (code=1). Connection failure: Connection refused',
+    `startup exit: ${show(error.text)}`);
   expect(h.commands.context('isRecording') === false, 'codeDictator.isRecording is still true after the failed start');
   expect(h.statusBar.micText() === MIC_IDLE, `mic after the failed start: ${show(h.statusBar.micText())}`);
-  expect(error.text.includes('Connection failure: Connection refused'), `startup-exit error lacks the recorder's stderr: ${show(error.text)}`);
 };
 
 /**

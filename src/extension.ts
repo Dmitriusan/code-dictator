@@ -6,6 +6,7 @@ import { FailedRecordings, type FailedRecording } from './storage/FailedRecordin
 import { StatusBar } from './ui/StatusBar';
 import { RecorderManager } from './recorder/RecorderManager';
 import type { AudioDiagnostics } from './recorder/NativeRecorder';
+import { NoRecorderError } from './recorder/NoRecorderError';
 import { isAudioSilent } from './recorder/AudioAnalysis';
 import { UsageTracker } from './tracking/UsageTracker';
 import { HistoryManager } from './tracking/History';
@@ -350,9 +351,28 @@ async function handleStartRecording(): Promise<void> {
   } catch (error) {
     statusBar.updateState('idle');
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
+    if (error instanceof NoRecorderError) {
+      showNoRecorder(error);
+      return;
+    }
     const message = error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(`Code Dictator: Failed to start recording — ${message}`);
   }
+}
+
+const COPY_INSTALL_COMMAND = 'Copy Install Command';
+
+/** Say which recording tool to install. Where one command installs it, a button copies that command. */
+function showNoRecorder(error: NoRecorderError): void {
+  const command = error.installCommand;
+  const buttons = command ? [COPY_INSTALL_COMMAND] : [];
+  // Not awaited: a notification nobody clicks must not keep Alt+D waiting
+  vscode.window.showErrorMessage(error.message, ...buttons).then(async (choice) => {
+    if (command && choice === COPY_INSTALL_COMMAND) {
+      await vscode.env.clipboard.writeText(command);
+      vscode.window.setStatusBarMessage(`$(check) Code Dictator: Copied "${command}"`, 3000);
+    }
+  });
 }
 
 async function handleStopAndTranscribe(): Promise<void> {

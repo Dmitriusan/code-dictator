@@ -126,13 +126,9 @@ export const SCENARIOS: readonly ScenarioUnit[] = [
     id: 'recorder-exit-errors',
     scenario: 'recorder-exit-errors',
     title: 'The recorder process exits mid-recording or right at startup',
-    kind: 'known-issue',
+    kind: 'regular',
     records: true,
     timeoutMs: 30_000,
-    knownIssue: {
-      summary: "the 'Recording process exited immediately' error drops the recorder's stderr: NativeRecorder.cleanup() clears it before the message is built",
-      signature: "startup-exit error lacks the recorder's stderr",
-    },
   },
   {
     id: 'hold-overlap-escape',

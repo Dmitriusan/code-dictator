@@ -33,6 +33,8 @@ export const MIC_TRANSCRIBING = '$(loading~spin) Transcribing...';
 export const MIC_CANCELLED = '$(x) Cancelled';
 export const WHISPER_PROMPT = 'Software development discussion. Technical terms, API names, function names, and code-related vocabulary.';
 export const RECORDING_SAVED_NOTE = 'Your recording is saved: press Retry, or run "Code Dictator: Retry Failed Transcription" later.';
+/** The error of a start on Linux when no recording tool is installed. It has no button: the package depends on the distribution. */
+export const NO_RECORDER_NOTE = 'Code Dictator needs a recording tool. Install pulseaudio-utils (parecord), pipewire-bin (pw-record) or alsa-utils (arecord) — then press Alt+D again.';
 /** parecord's arguments in file mode, before the output file. */
 export const PARECORD_FILE_ARGS = ['--latency-msec=100', '--format=s16le', '--rate=16000', '--channels=1', '--file-format=wav'];
 

@@ -6,3 +6,5 @@
 4. Your transcription appears at the cursor
 
 Works in any editor, chat panel, or input field.
+
+Recording uses a tool on your system. Linux: nothing to install. macOS: `brew install sox`. Windows: `winget install Gyan.FFmpeg`.

@@ -42,15 +42,16 @@ vi.mock('../../../src/recorder/NativeRecorder', () => ({
 
 import vscode, { type createMockWebviewPanel } from '../__mocks__/vscode';
 import { RecorderManager } from '../../../src/recorder/RecorderManager';
+import { NoRecorderError } from '../../../src/recorder/NoRecorderError';
 import { MIC_PERMISSION_DENIED } from '../../../src/recorder/RecorderWebviewContent';
+import { configureDiagnosticLog, disposeDiagnosticLog } from '../../../src/DiagnosticLog';
 
 type MockPanel = ReturnType<typeof createMockWebviewPanel>;
 
 const NO_MICROPHONE = 'No microphone found. Please connect a microphone and try again.';
 
-/** The error a start reports when no recorder can be used. */
-const unavailable = (reason: string) =>
-  `Microphone unavailable: ${reason}. Please check your audio devices, or install ffmpeg (Windows: winget install Gyan.FFmpeg) / arecord (Linux) / sox (macOS).`;
+/** What the user is told when no recorder can be used: which tool to install, not what the webview reported. */
+const NO_RECORDER_MESSAGE = new NoRecorderError().message;
 
 /** Let pending promise callbacks run, without advancing the fake clock. */
 const flush = async () => {
@@ -157,7 +158,7 @@ describe('RecorderManager.startRecording', () => {
       const onError = vi.fn();
       manager.onError(onError);
 
-      await expect(start(manager)).rejects.toHaveProperty('message', unavailable(MIC_PERMISSION_DENIED));
+      await expect(start(manager)).rejects.toBeInstanceOf(NoRecorderError);
 
       expect(vscode.window.createWebviewPanel).toHaveBeenCalledTimes(1);
       expect(vscode.window.createWebviewPanel).toHaveBeenCalledWith(
@@ -174,6 +175,23 @@ describe('RecorderManager.startRecording', () => {
       expect(manager.isRecording).toBe(false);
     });
 
+    it("tells the user which tool to install, and keeps the webview's own reason for the diagnostic log", async () => {
+      disposeDiagnosticLog();
+      configureDiagnosticLog(true);
+      const log = vscode.window.createOutputChannel.mock.results.at(-1)!.value;
+      try {
+        const failure = await start(manager).catch((error: Error) => error);
+
+        expect(failure).toBeInstanceOf(NoRecorderError);
+        expect((failure as Error).message).toBe(NO_RECORDER_MESSAGE);
+        expect((failure as Error).message).not.toContain(MIC_PERMISSION_DENIED);
+        expect(log.appendLine).toHaveBeenCalledWith(expect.stringContaining(`Webview recorder failed: ${MIC_PERMISSION_DENIED}`));
+      } finally {
+        configureDiagnosticLog(false);
+        disposeDiagnosticLog();
+      }
+    });
+
     it('releases the recording claim before closing the tab of a failed attempt', async () => {
       // The webview's own error clears the claim before the attempt fails. A
       // failure inside the extension (here: hiding the tab) does not, so this is
@@ -182,7 +200,7 @@ describe('RecorderManager.startRecording', () => {
       const onError = vi.fn();
       manager.onError(onError);
 
-      await expect(start(manager)).rejects.toHaveProperty('message', unavailable('command failed'));
+      await expect(start(manager)).rejects.toBeInstanceOf(NoRecorderError);
 
       expect(panels()[0].dispose).toHaveBeenCalledTimes(1);
       expect(onError).not.toHaveBeenCalled();
@@ -190,13 +208,13 @@ describe('RecorderManager.startRecording', () => {
     });
 
     it('after a refusal, fails later starts at once without opening the tab again', async () => {
-      await expect(start(manager)).rejects.toHaveProperty('message', unavailable(MIC_PERMISSION_DENIED));
+      await expect(start(manager)).rejects.toBeInstanceOf(NoRecorderError);
       // The page reports a refusal with exactly the text that is remembered
       expect(panels()[0].webview.html).toContain(JSON.stringify(MIC_PERMISSION_DENIED));
 
       const second = await outcome(manager.startRecording('basic', 5, 300));
 
-      expect(second).toBe(unavailable(MIC_PERMISSION_DENIED));
+      expect(second).toBe(NO_RECORDER_MESSAGE);
       expect(vscode.window.createWebviewPanel).toHaveBeenCalledTimes(1);
       expect(panels()[0].webview.postMessage).toHaveBeenCalledTimes(1); // the first start's startRecording
       expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1); // previousEditor, first start only
@@ -204,8 +222,8 @@ describe('RecorderManager.startRecording', () => {
     });
 
     it('does not remember other webview failures, so the next start tries the webview again', async () => {
-      await expect(start(manager, NO_MICROPHONE)).rejects.toHaveProperty('message', unavailable(NO_MICROPHONE));
-      await expect(start(manager, NO_MICROPHONE)).rejects.toHaveProperty('message', unavailable(NO_MICROPHONE));
+      await expect(start(manager, NO_MICROPHONE)).rejects.toBeInstanceOf(NoRecorderError);
+      await expect(start(manager, NO_MICROPHONE)).rejects.toBeInstanceOf(NoRecorderError);
 
       expect(vscode.window.createWebviewPanel).toHaveBeenCalledTimes(2);
       expect(panels().map((p) => p.dispose.mock.calls.length)).toEqual([1, 1]);
@@ -213,7 +231,7 @@ describe('RecorderManager.startRecording', () => {
 
     it('records natively, with no tab left open, once a native recorder is installed after a refusal', async () => {
       // e.g. the first Alt+D fails, then the user runs `brew install sox` and tries again
-      await expect(start(manager)).rejects.toThrow('Microphone unavailable');
+      await expect(start(manager)).rejects.toBeInstanceOf(NoRecorderError);
 
       native.available = true;
       await start(manager);
@@ -225,7 +243,7 @@ describe('RecorderManager.startRecording', () => {
     });
 
     it('leaves no timer running after a failed attempt', async () => {
-      await expect(start(manager, NO_MICROPHONE)).rejects.toThrow('Microphone unavailable');
+      await expect(start(manager, NO_MICROPHONE)).rejects.toBeInstanceOf(NoRecorderError);
 
       expect(vi.getTimerCount()).toBe(0);
     });
@@ -233,7 +251,7 @@ describe('RecorderManager.startRecording', () => {
     it("a failed attempt cannot disarm the next attempt's error handling", async () => {
       const onError = vi.fn();
       manager.onError(onError);
-      await expect(start(manager, NO_MICROPHONE)).rejects.toThrow('Microphone unavailable'); // t = 0
+      await expect(start(manager, NO_MICROPHONE)).rejects.toBeInstanceOf(NoRecorderError); // t = 0
 
       await vi.advanceTimersByTimeAsync(3000);
       const second = manager.startRecording('basic', 5, 300);
@@ -245,12 +263,12 @@ describe('RecorderManager.startRecording', () => {
       await vi.advanceTimersByTimeAsync(2500); // past the end of the first attempt's 5 s window
       panel._receive({ type: 'recordingError', message: NO_MICROPHONE });
 
-      expect(await outcome(second)).toBe(unavailable(NO_MICROPHONE));
+      expect(await outcome(second)).toBe(NO_RECORDER_MESSAGE);
       expect(onError).not.toHaveBeenCalled();
     });
 
     it("a failed attempt cannot hold up the next attempt's tab", async () => {
-      await expect(start(manager, NO_MICROPHONE)).rejects.toThrow('Microphone unavailable'); // t = 0
+      await expect(start(manager, NO_MICROPHONE)).rejects.toBeInstanceOf(NoRecorderError); // t = 0
 
       await vi.advanceTimersByTimeAsync(3000);
       const second = manager.startRecording('basic', 5, 300);
