@@ -137,26 +137,18 @@ export const SCENARIOS: readonly ScenarioUnit[] = [
   {
     id: 'hold-overlap-escape',
     scenario: 'hold-overlap-escape',
-    title: 'Hold mode: Escape cancels a second transcription that overlaps the first',
-    kind: 'known-issue',
+    title: 'Hold mode: Escape cancels every transcription still running when two overlap',
+    kind: 'regular',
     records: true,
     timeoutMs: 30_000,
-    knownIssue: {
-      summary: "the first pipeline's finally clears pipelineAbort and isProcessing while the second still runs, so Escape cannot cancel the second one and both texts are inserted",
-      signature: 'Escape did not cancel the overlapping second transcription',
-    },
   },
   {
     id: 'escape-during-startup',
     scenario: 'escape-during-startup',
-    title: 'Escape while the recorder is still starting',
-    kind: 'known-issue',
+    title: 'Escape while the recorder is still starting, in toggle and hold mode',
+    kind: 'regular',
     records: true,
     timeoutMs: 30_000,
-    knownIssue: {
-      summary: 'Escape pressed while the recorder starts is lost: the start goes on, the recorder keeps capturing, the status bar shows recording and the Escape keybinding is already off',
-      signature: 'although Escape was pressed during startup',
-    },
   },
   {
     id: 'recorder-tab-first-recording:file-open',

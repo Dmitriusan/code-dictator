@@ -40,11 +40,13 @@ let startRecordingPromise: Promise<void> | null = null;
  */
 let isTransitioning = false;
 /**
- * AbortController for the in-flight transcription/cleanup pipeline.
- * Set at the start of handleStopAndTranscribe(), cleared on completion.
- * Allows the user to cancel transcription or AI cleanup via Escape.
+ * AbortControllers of the in-flight transcription/cleanup pipelines.
+ * Each transcribeRecording() adds its own at the start and removes it on
+ * completion. Allows the user to cancel transcription or AI cleanup via Escape.
+ * Hold mode can have several: its pipeline runs outside isTransitioning, so
+ * the next recording can be released while the previous one is transcribed.
  */
-let pipelineAbort: AbortController | null = null;
+const pipelineAborts = new Set<AbortController>();
 
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize services
@@ -173,16 +175,16 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('codeDictator.cancelRecording', () => {
       if (recorder.isRecording) {
-        // Cancel active recording
+        // Cancel active recording, and in hold mode the previous one's transcription
         holdController.cancel(); // no-op if not in hold mode
         recorder.cancelRecording();
+        cancelPipelines();
         statusBar.updateState('idle');
         vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
         statusBar.showTransientMessage('$(x) Cancelled', 1500);
-      } else if (pipelineAbort) {
+      } else if (pipelineAborts.size > 0) {
         // Cancel in-flight transcription or AI cleanup
-        diagLog('Extension', 'Cancelling transcription/cleanup pipeline');
-        pipelineAbort.abort();
+        cancelPipelines();
       } else {
         // Defensive: reset any stale UI state (e.g. recorder error left status bar stuck)
         statusBar.updateState('idle');
@@ -357,6 +359,19 @@ async function handleStopAndTranscribe(): Promise<void> {
   await transcribeRecording(() => recorder.stopRecording());
 }
 
+/** Abort every transcription/cleanup pipeline in flight. */
+function cancelPipelines(): void {
+  if (pipelineAborts.size === 0) {
+    return;
+  }
+  diagLog('Extension', pipelineAborts.size > 1
+    ? `Cancelling ${pipelineAborts.size} transcription/cleanup pipelines`
+    : 'Cancelling transcription/cleanup pipeline');
+  for (const abort of pipelineAborts) {
+    abort.abort();
+  }
+}
+
 /**
  * Transcribe a recording, post-process the text and insert it. `retrying` is
  * set when the audio is a recording kept by an earlier failed attempt.
@@ -369,7 +384,7 @@ async function transcribeRecording(
 
   // Create an AbortController so the user can cancel transcription/cleanup via Escape
   const abort = new AbortController();
-  pipelineAbort = abort;
+  pipelineAborts.add(abort);
 
   try {
     // Get the audio: stop the recording, or load the saved one being retried
@@ -418,8 +433,8 @@ async function transcribeRecording(
       });
     } catch (error) {
       statusBar.updateState('idle');
-      if (isAbortError(error)) {
-        throw error; // Escape — reported as a cancellation below
+      if (isAbortError(error) || abort.signal.aborted) {
+        throw error; // Escape — reported as a cancellation below, whatever the request failed with
       }
       const message = error instanceof Error ? error.message : String(error);
       diagLog('STT', `Transcription failed: ${message}`);
@@ -494,6 +509,10 @@ async function transcribeRecording(
       }
     }
 
+    // Escape during AI cleanup: cleanup() hands back the raw text when its
+    // request is aborted, and a cancelled dictation must insert nothing
+    abort.signal.throwIfAborted();
+
     // Inject text
     const destination = await textInjector.inject(
       text,
@@ -525,15 +544,18 @@ async function transcribeRecording(
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
     const message = error instanceof Error ? error.message : String(error);
     // Suppress error messages for user-initiated cancellations (AbortError from fetch)
-    if (isAbortError(error)) {
+    if (isAbortError(error) || abort.signal.aborted) {
       diagLog('Extension', 'Pipeline cancelled by user');
       statusBar.showTransientMessage('$(x) Cancelled', 1500);
     } else if (!message.includes('cancelled')) {
       vscode.window.showErrorMessage(`Code Dictator: ${message}`);
     }
   } finally {
-    pipelineAbort = null;
-    vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', false);
+    pipelineAborts.delete(abort);
+    // A pipeline still running (hold mode) keeps Escape bound, so it can be cancelled too
+    if (pipelineAborts.size === 0) {
+      vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', false);
+    }
   }
 }
 
@@ -573,8 +595,8 @@ function showTranscriptionFailed(message: string, saved: FailedRecording | undef
 
 /** Send a saved recording through the pipeline again, e.g. after a quota top-up. */
 async function retryFailedRecording(recording: FailedRecording): Promise<void> {
-  // pipelineAbort also covers hold mode, whose pipeline runs outside isTransitioning
-  if (recorder.isRecording || isTransitioning || pipelineAbort) {
+  // pipelineAborts also covers hold mode, whose pipeline runs outside isTransitioning
+  if (recorder.isRecording || isTransitioning || pipelineAborts.size > 0) {
     vscode.window.showWarningMessage('Code Dictator: Another recording is in progress — retry when it is done. The failed one stays saved.');
     return;
   }

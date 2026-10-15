@@ -36,6 +36,10 @@ export class RecorderManager implements vscode.Disposable {
   // Set once the webview recorder has been refused the microphone. Later
   // starts in this window then fail at once instead of reopening its tab.
   private webviewMicDenied = false;
+  // The native start in progress. A recorder that is still starting cannot be
+  // cancelled yet, so cancelRecording() marks the start and the start cancels
+  // the recorder as soon as it runs.
+  private nativeStart: { cancelled: boolean } | undefined;
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -73,6 +77,12 @@ export class RecorderManager implements vscode.Disposable {
     maxDuration: number,
   ): Promise<void> {
     if (this._isRecording) {
+      if (this.nativeStart?.cancelled) {
+        // Hold mode: pressed again while a start cancelled with Escape is
+        // still running. Its recorder becomes this recording.
+        diagLog('RecorderManager', 'Start requested while a cancelled start is still running — keeping its recorder');
+        this.nativeStart.cancelled = false;
+      }
       return;
     }
 
@@ -207,7 +217,23 @@ export class RecorderManager implements vscode.Disposable {
       }, 2000);
     });
 
-    await recorder.start(silenceTimeout);
+    const start = { cancelled: false };
+    this.nativeStart = start;
+    try {
+      await recorder.start(silenceTimeout);
+    } finally {
+      if (this.nativeStart === start) {
+        this.nativeStart = undefined;
+      }
+    }
+    if (start.cancelled) {
+      // Escape came while the recorder was starting: nothing may record
+      diagLog('RecorderManager', 'Recording was cancelled while the native recorder was starting — cancelling it');
+      recorder.cancel();
+      this.nativeRecorder = null;
+      this._isRecording = false;
+      return;
+    }
     this._isRecording = true;
     diagLog('RecorderManager', `Started native recording, silenceTimeout=${silenceTimeout}s`);
     this.emit('recordingStarted');
@@ -306,6 +332,14 @@ export class RecorderManager implements vscode.Disposable {
 
   cancelRecording(): void {
     this.clearMaxDurationTimeout();
+
+    // The native recorder is still starting: its start cancels it as soon as
+    // it runs, and keeps the claim until then so no second recorder starts
+    if (this.nativeStart) {
+      diagLog('RecorderManager', 'Cancel requested while the native recorder is starting');
+      this.nativeStart.cancelled = true;
+      return;
+    }
 
     // Native recording path
     if (this.nativeRecorder?.isRecording) {

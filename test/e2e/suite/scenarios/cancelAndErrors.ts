@@ -7,6 +7,7 @@ import { field, filePart, sha1, transcript } from '../mockStt';
 import {
   MIC_CANCELLED,
   MIC_IDLE,
+  MIC_RECORDING,
   MIC_STARTING,
   RECORDING_SAVED_NOTE,
   RETRY,
@@ -21,6 +22,7 @@ import {
   startRecording,
   toggle,
   useMockProvider,
+  type Ctx,
   type Scenario,
 } from '../steps';
 import { check, clock, isAlive, show, sleep, waitFor } from '../util';
@@ -254,7 +256,10 @@ export const recorderExitErrors: Scenario = async (ctx) => {
   expect(error.text.includes('Connection failure: Connection refused'), `startup-exit error lacks the recorder's stderr: ${show(error.text)}`);
 };
 
-/** Hold mode, two overlapping transcriptions: Escape must cancel the second (known issue: it cannot). */
+/**
+ * Hold mode, two overlapping transcriptions: Escape cancels the second once the
+ * first is done, and both while both run. Nothing cancelled is inserted or kept.
+ */
 export const holdOverlapEscape: Scenario = async (ctx) => {
   const { h, expect } = ctx;
   await useMockProvider(h, { 'output.target': 'editor', 'recording.mode': 'hold' });
@@ -262,6 +267,7 @@ export const holdOverlapEscape: Scenario = async (ctx) => {
   const answerAfterMs = 4000;
   h.stt.respond((_request, index) => transcript(`pipeline ${index + 1}`, answerAfterMs));
   await settleRecorderTimers(h);
+  const t0 = clock();
   const m0 = h.fakes.count();
 
   void toggle(); // tap 1: released after 800 ms, its upload waits 4 s for an answer
@@ -272,45 +278,109 @@ export const holdOverlapEscape: Scenario = async (ctx) => {
   check(second.receivedAt < (first.repliedAt ?? Infinity), 'the two transcriptions did not overlap (machine too slow?); nothing to judge');
   const afterFirst = editor.document.getText();
   await sleep(200);
+  expect(h.commands.context('isProcessing') === true, 'codeDictator.isProcessing went false while the second transcription still ran, which unbinds Escape');
+  const t1 = clock();
   await cancel();
   await sleep(second.receivedAt + answerAfterMs + 500 - Date.now()); // past the moment the second answer arrives
 
   expect(h.fakes.startsSince(m0).length === 2, `${h.fakes.startsSince(m0).length} recorders for two taps`);
   expect(afterFirst === 'Pipeline 1', `first transcript ${show(afterFirst)}`);
-  const final = editor.document.getText();
-  expect(final === 'Pipeline 1' && h.stt.requests[1]?.clientAborted === true,
-    `Escape did not cancel the overlapping second transcription: the editor holds ${show(final)}, second request aborted: ${h.stt.requests[1]?.clientAborted}`);
+  expect(second.clientAborted, 'Escape did not abort the overlapping second transcription');
+  expect(editor.document.getText() === 'Pipeline 1', `after Escape the editor holds ${show(editor.document.getText())}`);
+  expect(h.statusBar.micTexts(t1).includes(MIC_CANCELLED), `mic texts after Escape ${show(h.statusBar.micTexts(t1))}`);
+  expect(h.commands.context('isProcessing') === false, 'codeDictator.isProcessing is still true after Escape');
+
+  // Both transcriptions still running: Escape cancels both
+  await settleRecorderTimers(h);
+  void toggle();
+  await sleep(1500);
+  void toggle();
+  const [third, fourth] = await waitFor('two more uploads', () => h.stt.requests.length >= 4 && h.stt.requests.slice(2), 6000);
+  await sleep(200);
+  check(third.repliedAt === undefined, 'the third transcription was answered before Escape (machine too slow?); nothing to judge');
+  await cancel();
+  await sleep(fourth.receivedAt + answerAfterMs + 500 - Date.now());
+
+  expect(third.clientAborted && fourth.clientAborted,
+    `Escape with two transcriptions running aborted the third: ${third.clientAborted}, the fourth: ${fourth.clientAborted}`);
+  expect(editor.document.getText() === 'Pipeline 1', `after Escape the editor holds ${show(editor.document.getText())}`);
+  expect(h.commands.context('isProcessing') === false, 'codeDictator.isProcessing is still true after Escape');
+  expect(h.listFailedRecordings().length === 0, `cancelled recordings were kept for retry: ${show(h.listFailedRecordings())}`);
+  expect(h.ui.notifications(t0).length === 0, `notifications ${show(notes(h.ui.notifications(t0)))}`);
 };
 
-/** Escape while the recorder starts must leave nothing recording (known issue: the start goes on). */
-export const escapeDuringStartup: Scenario = async (ctx) => {
+/**
+ * Alt+D, then Escape as soon as the mic shows Starting...: once its start
+ * completes the recorder is killed, nothing is recorded, uploaded or kept, and
+ * the mic and context keys are back to idle.
+ */
+async function escapeWhileStarting(ctx: Ctx, mode: 'toggle' | 'hold', editor: vscode.TextEditor): Promise<void> {
   const { h, expect, observe } = ctx;
-  await useMockProvider(h, { 'output.target': 'editor' });
-  const editor = await openFile(ctx, 'startup.txt', '');
+  await h.configure({ 'recording.mode': mode });
   await settleRecorderTimers(h);
+  const text = editor.document.getText();
+  const clip = await clipboard();
+  const uploads = h.stt.requests.length;
   const t0 = clock();
   const m0 = h.fakes.count();
 
-  const starting = toggle();
-  await waitFor('the starting state', () => h.statusBar.micTexts(t0).includes(MIC_STARTING), 2000, 2);
+  const pressed = toggle(); // toggle mode: settles with the start; hold mode: at once
+  await waitFor(`the starting state (${mode} mode)`, () => h.statusBar.micTexts(t0).includes(MIC_STARTING), 2000, 2);
   const t1 = clock();
   await cancel();
-  await Promise.race([starting, sleep(6000)]);
-  await sleep(800); // past NativeRecorder's 150 ms startup window
-  observe('startSettledAfterCancelMs', Math.round(Date.now() - t1));
+  if (mode === 'toggle') {
+    await Promise.race([pressed, sleep(6000)]);
+    observe('startSettledAfterCancelMs', Math.round(Date.now() - t1));
+  }
+  // "Cancelled" shows for 1.5 s; by then the start (150 ms) and hold mode's release (800 ms) are long past
+  await waitFor(`the mic to return to idle (${mode} mode)`, () => h.statusBar.micText() === MIC_IDLE, 4000).catch(() => undefined);
 
-  const recorders = h.fakes.startsSince(m0).map((m) => m.pid);
-  const running = recorders.filter(isAlive);
-  observe('recordersStarted', recorders.length);
-  expect(h.ui.notifications(t0).length === 0, `notifications ${show(notes(h.ui.notifications(t0)))}`);
-  expect(running.length === 0 && h.statusBar.micText() === MIC_IDLE,
-    `recorder ${show(running)} kept capturing although Escape was pressed during startup; mic ${show(h.statusBar.micText())}, isRecording ${show(h.commands.context('isRecording'))}`);
+  const texts = h.statusBar.mic.texts.filter((x) => x.t >= t0);
+  const cancelledAt = texts.find((x) => x.value === MIC_CANCELLED)?.t;
+  const recordingAt = texts.find((x) => x.value === MIC_RECORDING)?.t;
+  check(cancelledAt !== undefined, `${mode} mode: Escape during startup did not cancel; mic texts ${show(texts.map((x) => x.value))}`);
+  check(recordingAt === undefined || recordingAt > cancelledAt,
+    `${mode} mode: the recorder had started before Escape arrived (machine too slow?); nothing to judge`);
 
-  // Whatever happened, the next dictation works
-  await cancel();
-  h.fakes.killAll();
+  const recorders = h.fakes.startsSince(m0); // none when it was killed before it could log its start
+  const running = recorders.filter((m) => isAlive(m.pid)).map((m) => m.pid);
+  observe(`${mode}: recordersStarted`, recorders.length);
+  expect(running.length === 0 && recordingAt === undefined,
+    `${mode} mode: recorder ${show(running)} kept capturing although Escape was pressed during startup; mic texts ${show(texts.map((x) => x.value))}, isRecording ${show(h.commands.context('isRecording'))}`);
+  for (const recorder of recorders) {
+    expect(h.fakes.signalsOf(recorder.pid).length === 0, `${mode} mode: the recorder got ${show(h.fakes.signalsOf(recorder.pid))}; Escape must kill it, not stop it for transcription`);
+    expect(!fs.existsSync(recorder.output ?? ''), `${mode} mode: the temporary recording was not deleted`);
+  }
+  expect(h.diag.since(t1).some((l) => l.includes('cancelled while the native recorder was starting')),
+    `${mode} mode: no "cancelled while the native recorder was starting" diagnostic line`);
+  expect(h.statusBar.micText() === MIC_IDLE, `${mode} mode: mic ${show(h.statusBar.micText())} after Escape during startup`);
+  expect(h.commands.context('isRecording') === false && !h.commands.contextValues('isRecording', t1).includes(true),
+    `${mode} mode: codeDictator.isRecording went ${show(h.commands.contextValues('isRecording', t1))} after Escape`);
+  expect(!h.commands.contextValues('isProcessing', t0).includes(true), `${mode} mode: a transcription ran after Escape`);
+  expect(h.stt.requests.length === uploads, `${mode} mode: ${h.stt.requests.length - uploads} upload(s) after Escape during startup`);
+  expect(editor.document.getText() === text && (await clipboard()) === clip, `${mode} mode: the cancelled start produced text`);
+  expect(h.listFailedRecordings().length === 0, `${mode} mode: the cancelled recording was kept for retry`);
+  expect(h.ui.notifications(t0).length === 0, `${mode} mode: notifications ${show(notes(h.ui.notifications(t0)))}`);
+}
+
+/** Escape while the recorder starts, in toggle and hold mode, leaves nothing recording; the next dictation works. */
+export const escapeDuringStartup: Scenario = async (ctx) => {
+  const { h, expect } = ctx;
+  await useMockProvider(h, { 'output.target': 'editor' });
+  const editor = await openFile(ctx, 'startup.txt', '');
+  await clipboard('sentinel');
+
+  await escapeWhileStarting(ctx, 'toggle', editor);
   h.stt.reply(transcript('after escape'));
-  await setText(editor, '');
   await dictate(h, 300);
   expect(editor.document.getText() === 'After escape', `the dictation after Escape produced ${show(editor.document.getText())}`);
+
+  await setText(editor, '');
+  await escapeWhileStarting(ctx, 'hold', editor);
+  h.stt.reply(transcript('held after escape'));
+  await settleRecorderTimers(h);
+  void toggle(); // a tap: released after 800 ms
+  await waitFor('the transcript of the hold-mode tap after Escape', () => editor.document.getText() === 'Held after escape', 4000)
+    .catch(() => expect(false, `the hold-mode tap after Escape produced ${show(editor.document.getText())}`));
+  await waitFor('the pipeline to finish', () => h.commands.context('isProcessing') === false, 3000);
 };
