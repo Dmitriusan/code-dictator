@@ -26,13 +26,30 @@ jobs:
       - name: Package VSIX
         run: npx @vscode/vsce package --no-dependencies
 
+      - name: End-to-end tests on the packaged VSIX
+        id: e2e
+        run: |
+          unzip -q ./*.vsix -d "$RUNNER_TEMP/vsix"
+          npm run test:e2e
+        env:
+          E2E_EXTENSION_PATH: ${{ runner.temp }}/vsix
+          E2E_ARTIFACTS_DIR: ${{ runner.temp }}/e2e-results
+
+      - name: Upload end-to-end results
+        if: failure() && steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results
+          path: ${{ runner.temp }}/e2e-results
+
+      # The VSIX the end-to-end tests ran on; without --packagePath vsce would build and pack again
       - name: Publish to VS Code Marketplace
-        run: npx @vscode/vsce publish --no-dependencies
+        run: npx @vscode/vsce publish --packagePath ./*.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Create GitHub Release
-        if: always() && !cancelled()
+        if: always() && !cancelled() && steps.e2e.outcome == 'success'
         uses: softprops/action-gh-release@v3
         with:
           files: '*.vsix'

@@ -1,11 +1,18 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import type { AudioDataPayload, AudioIsolation, MessageFromWebview, MessageToWebview } from '../types';
-import { getRecorderWebviewContent } from './RecorderWebviewContent';
+import { getRecorderWebviewContent, MIC_PERMISSION_DENIED } from './RecorderWebviewContent';
 import { NativeRecorder, type AudioDiagnostics } from './NativeRecorder';
 import { diagLog } from '../DiagnosticLog';
 
 type RecorderEvent = 'recordingStarted' | 'recordingStopped' | 'audioData' | 'error' | 'silenceDetected' | 'trackEnded';
+
+/** The error a start reports when neither recorder can capture audio. */
+function microphoneUnavailable(reason: string): Error {
+  return new Error(
+    `Microphone unavailable: ${reason}. Please check your audio devices, or install ffmpeg (Windows: winget install Gyan.FFmpeg) / arecord (Linux) / sox (macOS).`
+  );
+}
 
 export class RecorderManager implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
@@ -26,6 +33,9 @@ export class RecorderManager implements vscode.Disposable {
   // Set during the webview permission-detection window to intercept errors
   // before they propagate to external onError handlers.
   private permissionErrorHandler: ((msg: string) => void) | undefined;
+  // Set once the webview recorder has been refused the microphone. Later
+  // starts in this window then fail at once instead of reopening its tab.
+  private webviewMicDenied = false;
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -67,18 +77,41 @@ export class RecorderManager implements vscode.Disposable {
     }
 
     // Claim recording state immediately to prevent concurrent startRecording()
-    // calls from racing through the ensurePanel() async gap (TOCTOU fix).
+    // calls from racing through the async gaps below (TOCTOU fix).
     this._isRecording = true;
 
-    // Primary: webview MediaRecorder (uses PulseAudio/PipeWire, works everywhere)
-    diagLog('RecorderManager', 'Trying webview recorder path');
+    // Primary: native recorder. VS Code does not grant extension webviews
+    // microphone access (microsoft/vscode#113916), so the webview recorder is
+    // only a last resort for machines without a native recording tool.
+    if (NativeRecorder.isAvailable()) {
+      diagLog('RecorderManager', 'Using native recorder path');
+      try {
+        await this.startNativeRecording(silenceTimeout, maxDuration);
+      } catch (error) {
+        // Release the claim, or every later start would return early above
+        this._isRecording = false;
+        this.nativeRecorder = null;
+        throw error;
+      }
+      return;
+    }
+
+    if (this.webviewMicDenied) {
+      diagLog('RecorderManager', 'No native recorder found, skipping webview recorder (refused the microphone earlier in this window)');
+      this._isRecording = false;
+      throw microphoneUnavailable(MIC_PERMISSION_DENIED);
+    }
+
+    // Last resort: webview MediaRecorder
+    diagLog('RecorderManager', 'No native recorder found, trying webview recorder path');
+    let permissionWindow: ReturnType<typeof setTimeout> | undefined;
     try {
       await this.ensurePanel();
 
       // Start recording with a short timeout to detect errors quickly.
       // We intercept ALL webview errors during the startup window so they don't
       // reach external onError listeners (which would show an error popup before
-      // the native fallback gets a chance to run).
+      // this start reports the failure itself).
       await new Promise<void>((resolve, reject) => {
         this.permissionErrorHandler = (msg: string) => {
           reject(new Error(msg));
@@ -97,38 +130,42 @@ export class RecorderManager implements vscode.Disposable {
         // getUserMedia can take several seconds when the OS shows a
         // permission dialog, so use a generous 5 s window before assuming
         // the webview is working and clearing the error handler.
-        setTimeout(() => {
+        permissionWindow = setTimeout(() => {
           this.permissionErrorHandler = undefined;
           resolve();
         }, 5000);
       });
     } catch (webviewError) {
-      // Webview recording failed — try native fallback (arecord/sox)
+      // Webview recording failed, and there is no native recorder to fall back to.
+      // Clear the window's timer so it can't disarm a later start's error handler.
+      clearTimeout(permissionWindow);
       this.permissionErrorHandler = undefined;
+      // Cleared before the tab is closed, so onDidDispose doesn't report
+      // "Recording panel was closed"
       this._isRecording = false;
       if (this.panel) {
-        this.panel.webview.postMessage({ type: 'cancelRecording' } as MessageToWebview);
+        this.panel.dispose();
+        this.panel = undefined;
       }
 
       const errorMsg = webviewError instanceof Error ? webviewError.message : String(webviewError);
       diagLog('RecorderManager', `Webview recorder failed: ${errorMsg}`);
-
-      if (NativeRecorder.isAvailable()) {
-        diagLog('RecorderManager', 'Falling back to native recorder');
-        return this.startNativeRecording(silenceTimeout, maxDuration);
+      if (errorMsg === MIC_PERMISSION_DENIED) {
+        this.webviewMicDenied = true;
       }
 
-      throw new Error(
-        `Microphone unavailable: ${errorMsg}. Please check your audio devices, or install ffmpeg (Windows: winget install Gyan.FFmpeg) / arecord (Linux) / sox (macOS).`
-      );
+      throw microphoneUnavailable(errorMsg);
     }
   }
 
   private async startNativeRecording(silenceTimeout: number, maxDuration: number): Promise<void> {
-    this.nativeRecorder = new NativeRecorder();
+    // The handlers below act only while `recorder` is still this.nativeRecorder:
+    // in hold mode the next recording can start while this one is still stopping.
+    const recorder = new NativeRecorder();
+    this.nativeRecorder = recorder;
 
     // If the native process exits unexpectedly, stop recording and report
-    this.nativeRecorder.setUnexpectedExitHandler(() => {
+    recorder.setUnexpectedExitHandler(() => {
       diagLog('RecorderManager', 'Native recorder exited unexpectedly — stopping');
       this._isRecording = false;
       this.emit('error', 'Recording process exited unexpectedly. Enable diagnostic logging in settings for details.');
@@ -136,7 +173,10 @@ export class RecorderManager implements vscode.Disposable {
 
     // Wire up silence detection
     if (silenceTimeout > 0) {
-      this.nativeRecorder.setSilenceHandler(() => {
+      recorder.setSilenceHandler(() => {
+        if (this.nativeRecorder !== recorder) {
+          return;
+        }
         diagLog('RecorderManager', 'Native recorder silence detected, auto-stopping');
         this.emit('silenceDetected');
       });
@@ -146,20 +186,20 @@ export class RecorderManager implements vscode.Disposable {
     // after 2 more seconds. We cancel (SIGKILL) rather than stop+transcribe
     // because parecord connected to an errored PipeWire stream can hang on
     // SIGTERM, and there's nothing to transcribe anyway.
-    this.nativeRecorder.setNoAudioDataHandler((diagnostics) => {
+    recorder.setNoAudioDataHandler((diagnostics) => {
       setTimeout(() => {
-        if (this._isRecording && this.nativeRecorder) {
+        if (this._isRecording && this.nativeRecorder === recorder) {
           // Re-check: parecord/PulseAudio can buffer ~2s before flushing the
           // first chunk, so the initial "no audio" warning may have fired just
           // before data started flowing. Don't cancel if audio has since arrived.
-          if (this.nativeRecorder.hasReceivedAudio()) {
+          if (recorder.hasReceivedAudio()) {
             diagLog('RecorderManager', 'Audio data started flowing during grace period — keeping recording alive');
             return;
           }
           diagLog('RecorderManager', 'Auto-cancelling recording — no audio data after 4s');
           this.emit('trackEnded', diagnostics);
           this.clearMaxDurationTimeout();
-          this.nativeRecorder.cancel();
+          recorder.cancel();
           this.nativeRecorder = null;
           this._isRecording = false;
           this.emit('recordingStopped');
@@ -167,7 +207,7 @@ export class RecorderManager implements vscode.Disposable {
       }, 2000);
     });
 
-    await this.nativeRecorder.start(silenceTimeout);
+    await recorder.start(silenceTimeout);
     this._isRecording = true;
     diagLog('RecorderManager', `Started native recording, silenceTimeout=${silenceTimeout}s`);
     this.emit('recordingStarted');
@@ -212,10 +252,15 @@ export class RecorderManager implements vscode.Disposable {
     }
 
     // Native recording path
-    if (this.nativeRecorder?.isRecording) {
+    const recorder = this.nativeRecorder;
+    if (recorder?.isRecording) {
       this._isRecording = false;
-      const result = await this.nativeRecorder.stop();
-      this.nativeRecorder = null;
+      const result = await recorder.stop();
+      // A recording started while this one was stopping stays tracked, so
+      // stop, Escape and dispose still reach it
+      if (this.nativeRecorder === recorder) {
+        this.nativeRecorder = null;
+      }
       return result;
     }
 
@@ -408,14 +453,16 @@ export class RecorderManager implements vscode.Disposable {
 
     // Wait for the webview to signal ready
     await new Promise<void>((resolve) => {
-      this.readyResolve = resolve;
-      // Timeout fallback — some webviews take a moment
-      setTimeout(() => {
-        if (this.readyResolve) {
-          this.readyResolve = undefined;
-          resolve();
-        }
+      // Timeout fallback — some webviews take a moment. Cleared on 'ready', so
+      // it can't take the resolver of a later start's wait.
+      const timeout = setTimeout(() => {
+        this.readyResolve = undefined;
+        resolve();
       }, 5000);
+      this.readyResolve = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
     });
 
     // Hide the recorder tab — switch back to the user's active editor.

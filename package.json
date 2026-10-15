@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for Claude Code, Copilot, Cline, or any AI chat in VS Code — 90+ languages, zero local dependencies, powered by ElevenLabs. Press Alt+D, talk, paste.",
-  "version": "1.1.20",
+  "version": "1.1.21",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -576,7 +576,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "tsc -p tsconfig.e2e.json && node dist-test/runTests.js",
+    "test:e2e": "npm run compile && tsc -p tsconfig.e2e.json && node dist-test/runTests.js",
+    "qa": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e",
     "prepackage": "rm -f *.vsix",
     "package": "npm run build && vsce package",
     "prepublish": "npm run build",

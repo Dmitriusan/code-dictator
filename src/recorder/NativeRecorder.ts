@@ -281,6 +281,7 @@ export class NativeRecorder {
             // Process exited during startup (before the 150ms timer)
             settled = true;
             diagLog('NativeRecorder', `Process exited during startup. code=${code}, signal=${signal}, stderr=${this.stderrData.trim()}`);
+            this.deleteTempFile();
             this.cleanup();
             reject(new Error(`Recording process exited immediately (code=${code}). ${this.stderrData.trim()}`));
             return;
@@ -288,9 +289,13 @@ export class NativeRecorder {
           if (this._isRecording && !this.stoppingGracefully) {
             const elapsed = Math.round((Date.now() - this.startTime) / 1000);
             diagLog('NativeRecorder', `Process exited unexpectedly after ${elapsed}s. code=${code}, signal=${signal}, stderr=${this.stderrData.trim()}`);
-            this._isRecording = false;
-            if (this.onUnexpectedExit) {
-              this.onUnexpectedExit();
+            const onUnexpectedExit = this.onUnexpectedExit;
+            // Nothing transcribes a recording that ended like this, so don't
+            // leave the audio in the temp directory
+            this.deleteTempFile();
+            this.cleanup();
+            if (onUnexpectedExit) {
+              onUnexpectedExit();
             }
           }
         });
@@ -573,10 +578,14 @@ export class NativeRecorder {
       // Node.js maps this to TerminateProcess() on Windows.
       try { this.process.kill('SIGKILL'); } catch { /* ignore */ }
     }
+    this.deleteTempFile();
+    this.cleanup();
+  }
+
+  private deleteTempFile(): void {
     if (this.tempFile && fs.existsSync(this.tempFile)) {
       try { fs.unlinkSync(this.tempFile); } catch { /* ignore */ }
     }
-    this.cleanup();
   }
 
   setUnexpectedExitHandler(handler: () => void): void {

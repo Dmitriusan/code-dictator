@@ -1,5 +1,8 @@
 // No runtime type imports needed — the webview HTML is a self-contained string.
 
+/** What the webview reports when getUserMedia is refused (NotAllowedError). */
+export const MIC_PERMISSION_DENIED = 'Microphone permission denied. Please allow microphone access in your browser/OS settings.';
+
 /**
  * Returns the HTML content for the hidden recorder webview panel.
  * The webview handles MediaRecorder, audio processing, silence detection,
@@ -344,7 +347,7 @@ export function getRecorderWebviewContent(nonce: string): string {
         cleanup();
         let message = 'Microphone access denied or unavailable';
         if (err.name === 'NotAllowedError') {
-          message = 'Microphone permission denied. Please allow microphone access in your browser/OS settings.';
+          message = ${JSON.stringify(MIC_PERMISSION_DENIED)};
         } else if (err.name === 'NotFoundError') {
           message = 'No microphone found. Please connect a microphone and try again.';
         } else if (err.message) {

@@ -58,6 +58,43 @@ export function createMockExtensionContext() {
   };
 }
 
+// ── Webview panels ──
+export function createMockWebviewPanel() {
+  let receive: ((message: unknown) => void) | undefined;
+  const disposeListeners = new Set<() => void>();
+  const panel = {
+    webview: {
+      html: '',
+      postMessage: vi.fn().mockResolvedValue(true),
+      onDidReceiveMessage: vi.fn((listener: (message: unknown) => void) => {
+        receive = listener;
+        return { dispose: () => { if (receive === listener) { receive = undefined; } } };
+      }),
+    },
+    reveal: vi.fn(),
+    onDidDispose: vi.fn((listener: () => void) => {
+      disposeListeners.add(listener);
+      return { dispose: () => { disposeListeners.delete(listener); } };
+    }),
+    // Like VS Code, dispose() fires onDidDispose synchronously. The user
+    // closing the tab is the same event.
+    dispose: vi.fn(() => {
+      if (!panel._disposed) {
+        panel._disposed = true;
+        disposeListeners.forEach((listener) => listener());
+      }
+    }),
+    _disposed: false,
+    /** Deliver a message as if the webview's script had posted it (dropped once disposed). */
+    _receive: (message: unknown) => {
+      if (!panel._disposed) {
+        receive?.(message);
+      }
+    },
+  };
+  return panel;
+}
+
 // ── The mock module ──
 const vscode = {
   window: {
@@ -78,6 +115,7 @@ const vscode = {
       hide: vi.fn(),
       dispose: vi.fn(),
     })),
+    createWebviewPanel: vi.fn(() => createMockWebviewPanel()),
   },
   workspace: {
     getConfiguration: vi.fn(() => createMockConfiguration()),
@@ -102,6 +140,13 @@ const vscode = {
   StatusBarAlignment: {
     Left: 1,
     Right: 2,
+  },
+  ViewColumn: {
+    Active: -1,
+    Beside: -2,
+    One: 1,
+    Two: 2,
+    Three: 3,
   },
   ThemeColor: vi.fn(function (this: { id: string }, id: string) {
     this.id = id;

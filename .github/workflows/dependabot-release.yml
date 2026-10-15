@@ -31,6 +31,18 @@ jobs:
       - run: npm run build
       - run: npm test
 
+      - name: End-to-end tests (headless VS Code stable)
+        run: npm run test:e2e
+        env:
+          E2E_ARTIFACTS_DIR: ${{ runner.temp }}/e2e-results
+
+      - name: Upload end-to-end results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results
+          path: ${{ runner.temp }}/e2e-results
+
       - name: Pull latest and bump version
         id: version
         run: |
