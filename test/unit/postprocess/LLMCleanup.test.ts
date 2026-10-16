@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup } from '../../../src/postprocess/LLMCleanup';
+import { cleanup, setCleanupLogger } from '../../../src/postprocess/LLMCleanup';
 
 describe('LLMCleanup.cleanup()', () => {
   const originalFetch = globalThis.fetch;
@@ -65,6 +65,8 @@ describe('LLMCleanup.cleanup()', () => {
     expect(body.temperature).toBe(0);
     expect(body.max_completion_tokens).toBe(256);
     expect(body).not.toHaveProperty('max_tokens');
+    // Fast mode: Standard processing now and then took 15–45 s
+    expect(body.service_tier).toBe('fast');
     expect(body.messages).toHaveLength(2);
     expect(body.messages[0].role).toBe('system');
     expect(body.messages[1].role).toBe('user');
@@ -487,5 +489,83 @@ describe('LLMCleanup.cleanup()', () => {
 
     const result = await cleanup('um hello like world', 'sk-test-key', undefined, ['en'], 'en');
     expect(result).toBe('Hello world.');
+  });
+
+  describe('Fast mode and the reply timeout', () => {
+    const ok = (content: string) => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content } }] }) });
+    // A request that answers only by failing once it is aborted
+    const hanging = () => vi.fn().mockImplementation((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+    }));
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('resends on Standard when Fast mode is refused, and stops asking for it', async () => {
+      vi.resetModules();
+      const fresh = await import('../../../src/postprocess/LLMCleanup');
+      const log: string[] = [];
+      fresh.setCleanupLogger((_source, message) => log.push(message));
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({ error: { param: 'service_tier', code: 'invalid_value' } }) })
+        .mockResolvedValueOnce(ok('Hello world'))
+        .mockResolvedValueOnce(ok('Hello again'));
+      globalThis.fetch = mockFetch;
+
+      expect(await fresh.cleanup('um hello world', 'sk-test-key')).toBe('Hello world');
+      expect(await fresh.cleanup('um hello again', 'sk-test-key')).toBe('Hello again');
+
+      const tiers = mockFetch.mock.calls.map((call) => JSON.parse(call[1].body).service_tier);
+      expect(tiers).toEqual(['fast', undefined, undefined]);
+      expect(log).toContain('Fast mode was refused, using Standard processing from now on');
+    });
+
+    it('does not resend a 400 that is not about the service tier', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => ({ error: { param: 'messages' } }) });
+      globalThis.fetch = mockFetch;
+
+      expect(await cleanup('um hello world', 'sk-test-key')).toBe('um hello world');
+      expect(mockFetch).toHaveBeenCalledOnce();
+    });
+
+    it('uses the raw transcript when no reply comes within 8 s', async () => {
+      vi.useFakeTimers();
+      const log: string[] = [];
+      setCleanupLogger((_source, message) => log.push(message));
+      globalThis.fetch = hanging();
+
+      const result = cleanup('um hello world', 'sk-test-key');
+      await vi.advanceTimersByTimeAsync(8000);
+
+      expect(await result).toBe('um hello world');
+      expect(log).toContain('No reply within 8 s, using the raw transcript');
+    });
+
+    it('waits longer for a long dictation', async () => {
+      vi.useFakeTimers();
+      globalThis.fetch = hanging();
+      const long = 'word '.repeat(400).trim(); // 1999 chars: about 20 s
+      let settled = false;
+
+      const result = cleanup(long, 'sk-test-key').then((text) => { settled = true; return text; });
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(12000);
+
+      expect(await result).toBe(long);
+    });
+
+    it('still lets the caller cancel the request', async () => {
+      const mockFetch = hanging();
+      globalThis.fetch = mockFetch;
+      const escape = new AbortController();
+
+      const result = cleanup('um hello world', 'sk-test-key', undefined, undefined, undefined, escape.signal);
+      escape.abort();
+
+      expect(await result).toBe('um hello world');
+      expect((mockFetch.mock.calls[0][1] as RequestInit).signal?.aborted).toBe(true);
+    });
   });
 });

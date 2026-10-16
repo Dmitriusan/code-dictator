@@ -10,6 +10,28 @@ const DEFAULT_MODEL = 'gpt-6-luna';
  */
 const RETIRED_MODEL = /^gpt-4(\.1|o)(-mini|-nano)?(-\d{4}-\d{2}-\d{2})?$/;
 
+/**
+ * Ask for OpenAI's Fast mode (service_tier "fast"), at twice the Standard token price.
+ * On Standard, gpt-6-luna now and then took 15–45 s to answer a one-line transcript.
+ * Fast answers in under a second and still costs half of what gpt-4.1-mini did on
+ * Standard. Turned off for the session if the API refuses the tier.
+ */
+let requestFastMode = true;
+
+/**
+ * Longest wait for the reply before the raw transcript is used instead: 8 s, or 10 ms
+ * per character for long dictations, whose cleaned text takes longer to generate.
+ */
+function replyTimeoutMs(text: string): number {
+  return Math.max(8000, text.length * 10);
+}
+
+/** Whether a 400 reply rejects the service_tier field, e.g. for a model without Fast mode. */
+async function refusesFastMode(response: Response): Promise<boolean> {
+  const body = await response.json().catch(() => undefined) as { error?: { param?: string } } | undefined;
+  return body?.error?.param === 'service_tier';
+}
+
 // Optional diagnostic logger injected by the extension at startup.
 // Keeps this module free of vscode imports so it stays unit-testable.
 let logFn: ((source: string, message: string) => void) | undefined;
@@ -228,13 +250,27 @@ export async function cleanup(
     logFn?.('LLMCleanup', `${model} is retired, using ${requestModel}`);
   }
 
+  // Escape (the caller's signal) and the reply timeout both abort the request
+  const request = new AbortController();
+  const timeoutMs = replyTimeoutMs(text);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    request.abort();
+  }, timeoutMs);
+  const onCancel = () => request.abort();
+  if (signal?.aborted) {
+    request.abort();
+  }
+  signal?.addEventListener('abort', onCancel, { once: true });
+
   try {
     const systemPrompt = buildSystemPrompt(detectedLanguage, preferredLanguages);
     const userMessage = buildUserMessage(text, detectedLanguage);
     logFn?.('LLMCleanup', `System prompt: ${systemPrompt}`);
     logFn?.('LLMCleanup', `Input: "${userMessage}" | model=${requestModel}, lang=${detectedLanguage ?? 'auto'}`);
 
-    const response = await fetch(OPENAI_CHAT_ENDPOINT, {
+    const send = (fast: boolean) => fetch(OPENAI_CHAT_ENDPOINT, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -251,9 +287,17 @@ export async function cleanup(
         reasoning_effort: 'none',
         temperature: 0,
         max_completion_tokens: Math.max(text.length * 2, 256),
+        ...(fast ? { service_tier: 'fast' } : {}),
       }),
-      signal,
+      signal: request.signal,
     });
+
+    let response = await send(requestFastMode);
+    if (requestFastMode && response.status === 400 && await refusesFastMode(response)) {
+      requestFastMode = false;
+      logFn?.('LLMCleanup', 'Fast mode was refused, using Standard processing from now on');
+      response = await send(false);
+    }
 
     if (!response.ok) {
       console.warn(
@@ -296,7 +340,13 @@ export async function cleanup(
 
     return cleaned;
   } catch (error) {
+    if (timedOut) {
+      logFn?.('LLMCleanup', `No reply within ${timeoutMs / 1000} s, using the raw transcript`);
+    }
     console.warn('Code Dictator: LLM cleanup failed', error);
     return text;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onCancel);
   }
 }
