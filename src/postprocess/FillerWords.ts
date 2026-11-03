@@ -6,8 +6,9 @@
  * then to English.
  *
  * Covers all languages supported by ElevenLabs Scribe v2 (90+) and
- * OpenAI Whisper (57). Conservative selection — only words that are
- * unambiguously hesitation markers, not common vocabulary. LLM cleanup
+ * OpenAI Whisper (57). Conservative — a filler left in beats a real word cut
+ * out: hesitation sounds are removed wherever they stand alone, fillers that
+ * are also ordinary words only where commas set them off. LLM cleanup
  * (codeDictator.aiTextCleanup) handles subtler cases.
  */
 
@@ -105,12 +106,36 @@ const FILLER_WORDS: Readonly<Record<string, ReadonlyArray<string>>> = {
   zu: ['uh', 'um'],                                                       // Zulu
 };
 
+/**
+ * Fillers that are only ever hesitation sounds. Every other filler is also an
+ * ordinary word — "значить" (it means), "типу" (of type), "este" (this),
+ * "tipo" (type) — and is removed only between commas or as the first word
+ * before a comma ("Значить, ..."), never from inside a sentence.
+ */
+const HESITATION_SOUNDS: ReadonlySet<string> = new Set([
+  'uh', 'um', 'ah', 'er', 'eh', 'erm', 'hmm', 'hm', 'mm', 'em', 'ehm', 'eeh', 'ag',
+  'yyy', 'euh', 'heu', 'bah', 'hein', 'beh', 'äh', 'ähm', 'öh', 'öö', 'øh', 'øhm',
+  'ăă', 'ıı', 'εε', 'е', 'э', 'ъ', 'ну', 'אמ', 'อ่า', 'เอ่อ', '어', '음', '嗯',
+  'えーと', 'ええと', 'えっと',
+]);
+
+/**
+ * Chinese and Japanese are written without spaces, so a filler there is also
+ * removed when the next word follows it directly ("嗯这很好").
+ */
+const UNSPACED_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+
 function applyFillerRemoval(text: string, filler: string): string {
   const f = esc(filler);
   let result = text;
 
   // Pattern 1: ", filler," → " " — both ASCII and CJK fullwidth commas
   result = result.replace(new RegExp(`[,，、]\\s*${f}\\s*[,，、]`, 'gi'), ' ');
+
+  if (!HESITATION_SOUNDS.has(filler)) {
+    // An ordinary word: besides between commas, only as the first word before a comma
+    return result.replace(new RegExp(`^${f}\\s*[,，、]\\s*`, 'gi'), '');
+  }
 
   if (isAsciiOnly(filler)) {
     // ASCII filler: \b word boundaries prevent matching inside words (e.g. "er" in "user")
@@ -119,9 +144,11 @@ function applyFillerRemoval(text: string, filler: string): string {
     // Non-ASCII (Cyrillic, CJK, Arabic, etc.): two patterns to cover all positions.
     const punct = `[\\s，。！？、…；：（），.!?:;]`;
 
-    // Start-of-text: consume filler + any trailing comma/punct/space.
-    // No lookahead needed — nothing precedes the filler.
-    result = result.replace(new RegExp(`^${f}[,.，、。]?\\s*`, 'gi'), '');
+    // Start-of-text: consume filler + any trailing comma/punct/space. In a
+    // script with spaces it must also end there, or it is the start of a longer
+    // word ("Е" in "Екран", "Ну" in "Нуль") or of a drawn-out "Е-е-е".
+    const end = UNSPACED_SCRIPT.test(filler) ? '' : `(?=${punct}|$)`;
+    result = result.replace(new RegExp(`^${f}[,.，、。]?${end}\\s*`, 'gi'), '');
 
     // Mid-sentence: filler is preceded AND followed by punct or end-of-string.
     result = result.replace(

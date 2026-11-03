@@ -86,6 +86,64 @@ describe('removeFillerWords()', () => {
     });
   });
 
+  describe('Ukrainian (uk)', () => {
+    it('removes "е" at the start, with or without a comma', () => {
+      expect(removeFillerWords('Е, перевірю зараз', 'uk')).toBe('Перевірю зараз');
+      expect(removeFillerWords('Е перевірю зараз', 'uk')).toBe('Перевірю зараз');
+    });
+
+    it('removes "е" between commas', () => {
+      expect(removeFillerWords('Подивись, е, цю сесію', 'uk')).toBe('Подивись цю сесію');
+    });
+
+    it('removes "значить" when it opens the dictation before a comma', () => {
+      expect(removeFillerWords('Значить, нагадаєш мені', 'uk')).toBe('Нагадаєш мені');
+    });
+  });
+
+  describe('real words', () => {
+    it.each([
+      ['uk', 'Екран не вмикається'],
+      ['uk', 'Отримав помилку'],
+      ['uk', 'Нуль байтів'],
+      ['ru', 'Это работает'],
+      ['ru', 'Нужно сделать'],
+      ['de', 'Ähnlich wie vorher'],
+      ['ko', '어디 가'],
+      ['th', 'อ่านหนังสือ'],
+    ])('keeps a first word that begins with a filler (%s: %s)', (lang, text) => {
+      expect(removeFillerWords(text, lang)).toBe(text);
+    });
+
+    it('keeps a drawn-out "Е-е-е" whole instead of cutting its first letter', () => {
+      expect(removeFillerWords('Е-е-е, додай це', 'uk')).toBe('Е-е-е, додай це');
+    });
+
+    it.each([
+      ['uk', 'То це значить, що треба'],
+      ['uk', 'Змінна типу string'],
+      ['uk', 'От чому не працює'],
+      ['ru', 'Вот почему это не работает'],
+      ['ru', 'Переменная типа int'],
+      ['ru', 'Сделай текст короче'],
+      ['es', 'Quiero este archivo'],
+      ['pt', 'O tipo de dados'],
+      ['pl', 'Do tego pliku'],
+      ['tr', 'Bir şey yap'],
+      ['ja', 'その関数は'],
+      ['ko', '그 함수를 고쳐'],
+    ])('keeps a filler that is also an ordinary word inside a sentence (%s: %s)', (lang, text) => {
+      expect(removeFillerWords(text, lang)).toBe(text);
+    });
+
+    it.each([
+      ['uk', 'е'], ['uk', 'ну'], ['ru', 'э'], ['bg', 'ъ'], ['de', 'ähm'], ['el', 'εε'], ['ro', 'ăă'],
+      ['tr', 'ıı'], ['da', 'øh'], ['sv', 'öh'], ['fi', 'öö'], ['he', 'אמ'], ['th', 'เอ่อ'], ['ko', '음'],
+    ])('still removes the %s hesitation sound "%s" inside a sentence', (lang, sound) => {
+      expect(removeFillerWords(`Alpha ${sound} beta`, lang)).toBe('Alpha beta');
+    });
+  });
+
   describe('Polish (pl)', () => {
     it('removes "yyy" filler', () => {
       expect(removeFillerWords('Chcę, yyy, to zrobić', 'pl')).toBe('Chcę to zrobić');
