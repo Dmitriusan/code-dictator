@@ -11,6 +11,7 @@ export interface TranscribeOptions {
 
 export interface TranscriptionResult {
   text: string;
+  /** Detected language, as an ISO 639-1 code ("uk") where the language has one. */
   language?: string;
   duration?: number;
   confidence?: number;

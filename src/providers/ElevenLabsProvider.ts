@@ -22,6 +22,28 @@ const RATE_LIMIT_REASONS: Record<string, string> = {
   rate_limit_exceeded: 'ElevenLabs rate limit reached',
 };
 
+/**
+ * ElevenLabs reports the detected language as an ISO 639-3 code ("ukr"), while
+ * filler removal and the AI cleanup's script check know languages by their ISO
+ * 639-1 code ("uk"). Scribe v2 languages that have one, with Mandarin and
+ * Cantonese as Chinese ("zh"); the others (Filipino "fil", Cebuano "ceb"...)
+ * keep their own code.
+ */
+const ISO_639_1: Record<string, string> = {
+  afr: 'af', amh: 'am', ara: 'ar', asm: 'as', aze: 'az', bel: 'be', ben: 'bn', bos: 'bs',
+  bul: 'bg', cat: 'ca', ces: 'cs', cmn: 'zh', cym: 'cy', dan: 'da', deu: 'de', ell: 'el',
+  eng: 'en', est: 'et', fas: 'fa', fin: 'fi', fra: 'fr', ful: 'ff', gle: 'ga', glg: 'gl',
+  guj: 'gu', hau: 'ha', heb: 'he', hin: 'hi', hrv: 'hr', hun: 'hu', hye: 'hy', ibo: 'ig',
+  ind: 'id', isl: 'is', ita: 'it', jav: 'jv', jpn: 'ja', kan: 'kn', kat: 'ka', kaz: 'kk',
+  khm: 'km', kir: 'ky', kor: 'ko', kur: 'ku', lao: 'lo', lav: 'lv', lin: 'ln', lit: 'lt',
+  ltz: 'lb', lug: 'lg', mal: 'ml', mar: 'mr', mkd: 'mk', mlt: 'mt', mon: 'mn', mri: 'mi',
+  msa: 'ms', mya: 'my', nep: 'ne', nld: 'nl', nor: 'no', nya: 'ny', oci: 'oc', ori: 'or',
+  pan: 'pa', pol: 'pl', por: 'pt', pus: 'ps', ron: 'ro', rus: 'ru', sin: 'si', slk: 'sk',
+  slv: 'sl', sna: 'sn', snd: 'sd', som: 'so', spa: 'es', srp: 'sr', swa: 'sw', swe: 'sv',
+  tam: 'ta', tel: 'te', tgk: 'tg', tha: 'th', tur: 'tr', ukr: 'uk', urd: 'ur', uzb: 'uz',
+  vie: 'vi', wol: 'wo', xho: 'xh', yor: 'yo', yue: 'zh', zho: 'zh', zul: 'zu',
+};
+
 /** Resolve after `ms`, or reject right away if the request is cancelled meanwhile. */
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -151,9 +173,11 @@ export class ElevenLabsProvider implements STTProvider {
     const durationSec = duration ?? (audio.length / 16000); // rough fallback
     const cost = durationSec * COST_PER_SECOND;
 
+    const code = data.language_code?.toLowerCase();
+
     return {
       text: data.text ?? '',
-      language: data.language_code,
+      language: code && (ISO_639_1[code] ?? code),
       confidence: data.language_probability,
       duration,
       cost,

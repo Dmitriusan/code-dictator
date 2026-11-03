@@ -88,7 +88,7 @@ describe('ElevenLabsProvider', () => {
         ok: true,
         json: async () => ({
           text: 'hello world',
-          language_code: 'en',
+          language_code: 'eng',
           language_probability: 0.95,
           words: [
             { start: 0, end: 0.5, text: 'hello' },
@@ -119,7 +119,7 @@ describe('ElevenLabsProvider', () => {
         ok: true,
         json: async () => ({
           text: 'привіт',
-          language_code: 'uk',
+          language_code: 'ukr',
         }),
       });
       globalThis.fetch = mockFetch;
@@ -132,6 +132,36 @@ describe('ElevenLabsProvider', () => {
       const bodyStr = bodyBuffer.toString();
       expect(bodyStr).toContain('language_code');
       expect(bodyStr).toContain('uk');
+    });
+
+    it.each([
+      ['ukr', 'uk'],
+      ['rus', 'ru'],
+      ['pol', 'pl'],
+      ['zho', 'zh'],
+      ['fil', 'fil'],
+    ])('reports the detected language %s as %s', async (code, expected) => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'text', language_code: code }),
+      });
+
+      const provider = new ElevenLabsProvider(async () => 'test-api-key-12345');
+      const result = await provider.transcribe(Buffer.from('fake-audio-data'), {});
+
+      expect(result.language).toBe(expected);
+    });
+
+    it('leaves the language unset when none was detected', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: '' }),
+      });
+
+      const provider = new ElevenLabsProvider(async () => 'test-api-key-12345');
+      const result = await provider.transcribe(Buffer.from('fake-audio-data'), {});
+
+      expect(result.language).toBeUndefined();
     });
 
     it('does not include language_code when language is not specified', async () => {
