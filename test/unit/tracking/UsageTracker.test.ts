@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { UsageTracker } from '../../../src/tracking/UsageTracker';
+import { UsageTracker, formatCost, formatDuration } from '../../../src/tracking/UsageTracker';
 import type { StorageService } from '../../../src/storage/StorageService';
 
 function createMockStorage(): StorageService {
@@ -30,95 +30,77 @@ function createMockStorage(): StorageService {
 describe('UsageTracker', () => {
   describe('formatCost()', () => {
     it('returns "Free" for cost of 0', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatCost(0)).toBe('Free');
+      expect(formatCost(0)).toBe('Free');
     });
 
     it('formats very small costs with 4 decimal places', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatCost(0.001)).toBe('$0.0010');
+      expect(formatCost(0.001)).toBe('$0.0010');
     });
 
     it('formats costs under a penny with 4 decimal places', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatCost(0.0099)).toBe('$0.0099');
+      expect(formatCost(0.0099)).toBe('$0.0099');
     });
 
     it('formats costs at a penny boundary with 2 decimal places', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatCost(0.01)).toBe('$0.01');
+      expect(formatCost(0.01)).toBe('$0.01');
     });
 
     it('formats costs in cents range with 2 decimal places', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatCost(0.12)).toBe('$0.12');
+      expect(formatCost(0.12)).toBe('$0.12');
     });
 
     it('formats dollar amounts with 2 decimal places', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatCost(1.5)).toBe('$1.50');
+      expect(formatCost(1.5)).toBe('$1.50');
     });
 
     it('formats larger amounts', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatCost(10.99)).toBe('$10.99');
+      expect(formatCost(10.99)).toBe('$10.99');
     });
 
     it('formats whole dollar amounts', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatCost(5)).toBe('$5.00');
+      expect(formatCost(5)).toBe('$5.00');
     });
   });
 
   describe('formatDuration()', () => {
     it('formats seconds only for durations under a minute', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(5000)).toBe('5s');
+      expect(formatDuration(5000)).toBe('5s');
     });
 
     it('formats 0 seconds', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(0)).toBe('0s');
+      expect(formatDuration(0)).toBe('0s');
     });
 
     it('formats exactly one minute', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(60000)).toBe('1m');
+      expect(formatDuration(60000)).toBe('1m');
     });
 
     it('formats minutes and seconds', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(65000)).toBe('1m 5s');
+      expect(formatDuration(65000)).toBe('1m 5s');
     });
 
     it('formats minutes without remaining seconds', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(120000)).toBe('2m');
+      expect(formatDuration(120000)).toBe('2m');
     });
 
     it('formats exactly one hour', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(3600000)).toBe('1h 0m');
+      expect(formatDuration(3600000)).toBe('1h 0m');
     });
 
     it('formats hours and minutes', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(3661000)).toBe('1h 1m');
+      expect(formatDuration(3661000)).toBe('1h 1m');
     });
 
     it('formats multiple hours', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(7200000)).toBe('2h 0m');
+      expect(formatDuration(7200000)).toBe('2h 0m');
     });
 
     it('formats hours with many minutes', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(5400000)).toBe('1h 30m');
+      expect(formatDuration(5400000)).toBe('1h 30m');
     });
 
     it('truncates sub-second precision', () => {
-      const tracker = new UsageTracker(createMockStorage());
-      expect(tracker.formatDuration(5500)).toBe('5s');
+      expect(formatDuration(5500)).toBe('5s');
     });
   });
 
@@ -163,33 +145,6 @@ describe('UsageTracker', () => {
 
       expect(storage.getUsageStats).toHaveBeenCalledOnce();
       expect(stats.totalTranscriptions).toBe(0);
-    });
-  });
-
-  describe('getStatusBarText()', () => {
-    it('returns empty string when no usage today', () => {
-      const storage = createMockStorage();
-      const tracker = new UsageTracker(storage);
-
-      expect(tracker.getStatusBarText()).toBe('');
-    });
-
-    it('returns cost text when there is today usage', () => {
-      const storage = createMockStorage();
-      (storage.getUsageStats as ReturnType<typeof vi.fn>).mockReturnValue({
-        totalTranscriptions: 5,
-        totalDurationMs: 30000,
-        totalEstimatedCost: 0.05,
-        todayTranscriptions: 2,
-        todayDurationMs: 10000,
-        todayEstimatedCost: 0.02,
-        weekTranscriptions: 5,
-        weekDurationMs: 30000,
-        weekEstimatedCost: 0.05,
-      });
-      const tracker = new UsageTracker(storage);
-
-      expect(tracker.getStatusBarText()).toBe('$(credit-card) $0.02');
     });
   });
 });

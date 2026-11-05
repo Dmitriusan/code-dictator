@@ -9,6 +9,7 @@ import type { AudioDiagnostics } from './recorder/NativeRecorder';
 import { NoRecorderError } from './recorder/NoRecorderError';
 import { isAudioSilent } from './recorder/AudioAnalysis';
 import { UsageTracker } from './tracking/UsageTracker';
+import { ElevenLabsBalance } from './tracking/ElevenLabsBalance';
 import { HistoryManager } from './tracking/History';
 import { TextInjector } from './injection/TextInjector';
 import { createProvider } from './providers/ProviderFactory';
@@ -18,17 +19,22 @@ import { applyCodeAware } from './postprocess/CodeAware';
 import { cleanup as llmCleanup, setCleanupLogger } from './postprocess/LLMCleanup';
 import { showLanguagePicker, showLanguageConfigurator } from './ui/LanguagePicker';
 import { runSetupWizard } from './ui/SetupWizard';
+import { balanceView, costView, type UsageView } from './ui/UsageIndicator';
+import { showUsagePicker } from './ui/UsagePicker';
 import { HoldModeController } from './recorder/HoldModeController';
 import { configureDiagnosticLog, diagLog, disposeDiagnosticLog } from './DiagnosticLog';
 import { playCompletionChime } from './ui/SoundPlayer';
 import { isHallucination, isSuspiciouslyShort } from './postprocess/HallucinationFilter';
-import type { AudioDataPayload, TranscriptionResult } from './types';
+import type { AudioDataPayload, ProviderType, TranscriptionResult } from './types';
 
 let storageService: StorageService;
 let failedRecordings: FailedRecordings;
 let statusBar: StatusBar;
 let recorder: RecorderManager;
 let usageTracker: UsageTracker;
+let elevenLabsBalance: ElevenLabsBalance;
+/** Reads the ElevenLabs balance again once a transcription's charge has had time to show. */
+let balanceCheckTimer: ReturnType<typeof setTimeout> | undefined;
 let historyManager: HistoryManager;
 let textInjector: TextInjector;
 let holdController: HoldModeController;
@@ -49,6 +55,11 @@ let isTransitioning = false;
  */
 const pipelineAborts = new Set<AbortController>();
 
+/** ElevenLabs may post a transcription's charge a moment after answering. */
+const BALANCE_CHECK_DELAY_MS = 2000;
+/** A window coming to the front reads a balance older than this again. */
+const BALANCE_MAX_AGE_MS = 10 * 60_000;
+
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize services
   storageService = new StorageService(context);
@@ -60,6 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar = new StatusBar();
   recorder = new RecorderManager(context.extensionUri);
   usageTracker = new UsageTracker(storageService);
+  elevenLabsBalance = new ElevenLabsBalance(context.globalState, () => storageService.getApiKey('elevenlabs'));
   historyManager = new HistoryManager(storageService);
   textInjector = new TextInjector();
   holdController = new HoldModeController();
@@ -89,7 +101,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // Initialize status bar state
   const settings = storageService.getSettings();
   statusBar.updateLanguage(settings.language);
-  statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);
+  showUsageIndicator();
+  checkBalance();
 
   // Set initial recording/processing context
   vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
@@ -294,10 +307,35 @@ export function activate(context: vscode.ExtensionContext): void {
       if (e.affectsConfiguration('codeDictator')) {
         const newSettings = storageService.getSettings();
         statusBar.updateLanguage(newSettings.language);
-        statusBar.updateCost(usageTracker.getStatusBarText(), newSettings.showCostIndicator);
+        showUsageIndicator();
         configureDiagnosticLog(newSettings.diagnosticLogging);
+        if (e.affectsConfiguration('codeDictator.provider') || e.affectsConfiguration('codeDictator.feedback.showCost')) {
+          checkBalance();
+        }
       }
     }),
+  );
+
+  // A new ElevenLabs key (from the setup wizard, in any window) may belong to another account
+  context.subscriptions.push(
+    context.secrets.onDidChange((e) => {
+      if (e.key === 'codeDictator.elevenlabs.apiKey') {
+        checkBalance();
+      }
+    }),
+  );
+
+  // Another window may have read a newer balance; an old one is read again
+  context.subscriptions.push(
+    vscode.window.onDidChangeWindowState((state) => {
+      if (state.focused) {
+        showUsageIndicator();
+        if (Date.now() - elevenLabsBalance.lastChecked > BALANCE_MAX_AGE_MS) {
+          checkBalance();
+        }
+      }
+    }),
+    { dispose: () => clearTimeout(balanceCheckTimer) },
   );
 
   // Show onboarding on first activation
@@ -453,6 +491,9 @@ async function transcribeRecording(
       });
     } catch (error) {
       statusBar.updateState('idle');
+      if (provider.id === 'elevenlabs') {
+        checkBalanceSoon(); // the error may be that the credits ran out
+      }
       if (isAbortError(error) || abort.signal.aborted) {
         throw error; // Escape — reported as a cancellation below, whatever the request failed with
       }
@@ -463,6 +504,10 @@ async function transcribeRecording(
       return;
     }
     diagLog('STT', `Result: "${result.text}", language=${result.language ?? 'n/a'}, duration=${result.duration ?? 'n/a'}s, cost=${result.cost ?? 'n/a'}`);
+    if (provider.id === 'elevenlabs') {
+      // Charged even when no speech comes back or the dictation is cancelled from here on
+      noteElevenLabsAudio(audioPayload.durationMs);
+    }
 
     if (!result.text.trim() || isHallucination(result.text)) {
       statusBar.updateState('idle');
@@ -548,7 +593,7 @@ async function transcribeRecording(
 
     // Update status bar
     statusBar.updateState('idle');
-    statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);
+    showUsageIndicator();
 
     // Silent feedback via status bar — no popups to interrupt the dictate→review→dictate flow
     const charCount = text.length;
@@ -701,6 +746,10 @@ async function handleTranscribeFile(): Promise<void> {
     const result = await provider.transcribe(audioBuffer, {
       language: settings.language || undefined,
       mimeType: fileMimeType,
+    }).finally(() => {
+      if (provider.id === 'elevenlabs') {
+        checkBalanceSoon();
+      }
     });
 
     if (!result.text.trim()) {
@@ -756,9 +805,12 @@ async function handleTranscribeFile(): Promise<void> {
       ? result.duration * 1000
       : (audioBuffer.length / 32) * 1000;   // fallback: 16-bit 16 kHz = 32 bytes/ms
     await usageTracker.record(result, provider.id, durationMs);
+    if (provider.id === 'elevenlabs') {
+      noteElevenLabsAudio(durationMs);
+    }
 
     statusBar.updateState('idle');
-    statusBar.updateCost(usageTracker.getStatusBarText(), settings.showCostIndicator);
+    showUsageIndicator();
 
     const charCount = text.length;
     statusBar.showTransientMessage(`$(check) File: ${charCount} chars → ${destination}`, undefined, true);
@@ -774,53 +826,76 @@ async function handleTranscribeFile(): Promise<void> {
 }
 
 async function handleShowUsage(): Promise<void> {
-  const stats = usageTracker.getStats();
-
-  const items: vscode.QuickPickItem[] = [
-    {
-      label: '$(calendar) Today',
-      description: `${stats.todayTranscriptions} transcriptions`,
-      detail: `Duration: ${usageTracker.formatDuration(stats.todayDurationMs)} | Cost: ${usageTracker.formatCost(stats.todayEstimatedCost)}`,
-    },
-    {
-      label: '$(calendar) This Week',
-      description: `${stats.weekTranscriptions} transcriptions`,
-      detail: `Duration: ${usageTracker.formatDuration(stats.weekDurationMs)} | Cost: ${usageTracker.formatCost(stats.weekEstimatedCost)}`,
-    },
-    {
-      label: '$(history) All Time',
-      description: `${stats.totalTranscriptions} transcriptions`,
-      detail: `Duration: ${usageTracker.formatDuration(stats.totalDurationMs)} | Cost: ${usageTracker.formatCost(stats.totalEstimatedCost)}`,
-    },
-    {
-      label: '',
-      kind: vscode.QuickPickItemKind.Separator,
-    },
-    {
-      label: '$(book) View History',
-      description: 'Browse past transcriptions',
-    },
-    {
-      label: '$(gear) Open Settings',
-      description: 'Configure Code Dictator',
-    },
-  ];
-
-  const selected = await vscode.window.showQuickPick(items, {
-    placeHolder: 'Code Dictator — Usage & Costs',
+  const settings = storageService.getSettings();
+  const elevenLabs = settings.provider === 'elevenlabs';
+  const balance = elevenLabs ? elevenLabsBalance.balance : undefined;
+  const action = await showUsagePicker({
+    provider: settings.provider,
+    stats: usageTracker.getStats(),
+    balance,
+    rate: elevenLabsBalance.rate(),
+    problem: elevenLabs ? elevenLabsBalance.problem : undefined,
+    now: Date.now(),
   });
 
-  if (!selected) {
-    return;
-  }
-
-  if (selected.label.includes('View History')) {
+  if (action === 'history') {
     historyManager.showHistoryQuickPick();
-  } else if (selected.label.includes('Open Settings')) {
+  } else if (action === 'settings') {
     vscode.commands.executeCommand('codeDictator.openSettings');
+  } else if (action === 'checkBalance') {
+    await elevenLabsBalance.refresh();
+    showUsageIndicator();
+    await handleShowUsage();
   }
 }
 
+/**
+ * The status bar's usage item: with ElevenLabs the credits left in the
+ * subscription, otherwise (or while the balance cannot be read) today's
+ * estimated speech-to-text cost.
+ */
+function showUsageIndicator(): void {
+  const settings = storageService.getSettings();
+  statusBar.updateUsage(settings.showCostIndicator ? usageView(settings.provider) : undefined);
+}
+
+function usageView(provider: ProviderType): UsageView | undefined {
+  const balance = provider === 'elevenlabs' ? elevenLabsBalance.balance : undefined;
+  if (balance) {
+    return balanceView(balance, elevenLabsBalance.rate(), elevenLabsBalance.problem, Date.now());
+  }
+  return costView(usageTracker.getStats(), provider, provider === 'elevenlabs' ? elevenLabsBalance.problem : undefined);
+}
+
+/** Read the ElevenLabs balance again, when the status bar shows it. */
+function checkBalance(): void {
+  const settings = storageService.getSettings();
+  if (settings.provider !== 'elevenlabs' || !settings.showCostIndicator) {
+    return;
+  }
+  elevenLabsBalance.refresh().then(() => {
+    const { balance, problem } = elevenLabsBalance;
+    const rate = elevenLabsBalance.rate();
+    diagLog('Balance', balance
+      ? `ElevenLabs: ${balance.limit - balance.used} of ${balance.limit} credits left, tier=${balance.tier ?? 'n/a'}, `
+        + `${rate.creditsPerMinute.toFixed(1)} credits/min (${Math.round(rate.measuredSeconds)}s measured)${problem ? `; not read again: ${problem.kind}` : ''}`
+      : `ElevenLabs balance not read: ${problem ? JSON.stringify(problem) : 'no API key'}`);
+    showUsageIndicator();
+  });
+}
+
+function checkBalanceSoon(): void {
+  clearTimeout(balanceCheckTimer);
+  balanceCheckTimer = setTimeout(checkBalance, BALANCE_CHECK_DELAY_MS);
+}
+
+/** Count audio ElevenLabs transcribed, so the credits it cost can be measured, and read the balance soon. */
+function noteElevenLabsAudio(durationMs: number): void {
+  elevenLabsBalance.noteTranscribed(durationMs / 1000).catch(() => { /* best-effort */ });
+  checkBalanceSoon();
+}
+
 export function deactivate(): void {
+  clearTimeout(balanceCheckTimer);
   disposeDiagnosticLog();
 }

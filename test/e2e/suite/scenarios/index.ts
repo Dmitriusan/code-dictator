@@ -27,6 +27,7 @@ import {
   recorderTabCancel,
   recorderTabRepeatAndErrors,
 } from './recorderTab';
+import { elevenLabsBalance } from './usage';
 
 /** Implementation of every unit in ../../catalog.ts, by unit id. */
 export const IMPLEMENTATIONS: Record<string, Scenario> = {
@@ -52,4 +53,5 @@ export const IMPLEMENTATIONS: Record<string, Scenario> = {
   'orphan-recorder-on-close': orphanRecorderOnClose,
   'editor-layout-guard:open-positioning-first': layoutOpenPositioningFirst,
   'editor-layout-guard:editor-limit-1': layoutEditorLimit1,
+  'elevenlabs-balance': elevenLabsBalance,
 };

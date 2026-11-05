@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
+import type { UsageView } from './UsageIndicator';
 
 export type StatusBarState = 'idle' | 'initializing' | 'recording' | 'transcribing' | 'cleaning';
 
 export class StatusBar implements vscode.Disposable {
   private readonly micButton: vscode.StatusBarItem;
   private readonly languageIndicator: vscode.StatusBarItem;
-  private readonly costIndicator: vscode.StatusBarItem;
+  private readonly usageIndicator: vscode.StatusBarItem;
   private recordingStartTime: number | undefined;
   private recordingTimer: ReturnType<typeof setInterval> | undefined;
   private transientTimer: ReturnType<typeof setTimeout> | undefined;
@@ -27,13 +28,13 @@ export class StatusBar implements vscode.Disposable {
     this.languageIndicator.command = 'codeDictator.selectLanguage';
     this.languageIndicator.name = 'Code Dictator: Language';
 
-    // Cost indicator — next to language
-    this.costIndicator = vscode.window.createStatusBarItem(
+    // Speech-to-text usage (ElevenLabs credits, or today's cost) — next to language
+    this.usageIndicator = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Right,
       98,
     );
-    this.costIndicator.command = 'codeDictator.showUsage';
-    this.costIndicator.name = 'Code Dictator: Cost';
+    this.usageIndicator.command = 'codeDictator.showUsage';
+    this.usageIndicator.name = 'Code Dictator: Speech-to-Text Usage';
 
     // Set initial state
     this.updateState('idle');
@@ -102,14 +103,18 @@ export class StatusBar implements vscode.Disposable {
     }
   }
 
-  updateCost(text: string, showCost: boolean): void {
-    if (!showCost || !text) {
-      this.costIndicator.hide();
+  /** Show the ElevenLabs credits or today's speech-to-text cost; undefined hides the item. */
+  updateUsage(view: UsageView | undefined): void {
+    if (!view) {
+      this.usageIndicator.hide();
       return;
     }
-    this.costIndicator.text = text;
-    this.costIndicator.tooltip = 'Code Dictator: Today\'s estimated cost. Click for details.';
-    this.costIndicator.show();
+    this.usageIndicator.text = view.text;
+    this.usageIndicator.tooltip = new vscode.MarkdownString(view.tooltip, true);
+    this.usageIndicator.backgroundColor = view.level
+      ? new vscode.ThemeColor(`statusBarItem.${view.level}Background`)
+      : undefined;
+    this.usageIndicator.show();
   }
 
   /**
@@ -159,7 +164,7 @@ export class StatusBar implements vscode.Disposable {
   hide(): void {
     this.micButton.hide();
     this.languageIndicator.hide();
-    this.costIndicator.hide();
+    this.usageIndicator.hide();
   }
 
   dispose(): void {
@@ -170,7 +175,7 @@ export class StatusBar implements vscode.Disposable {
     }
     this.micButton.dispose();
     this.languageIndicator.dispose();
-    this.costIndicator.dispose();
+    this.usageIndicator.dispose();
   }
 
   private startRecordingTimer(): void {

@@ -13,8 +13,8 @@ describe('ElevenLabsProvider', () => {
     it('estimates cost for 60 seconds correctly', () => {
       const provider = new ElevenLabsProvider(async () => 'test-key');
       const cost = provider.estimateCost(60000);
-      // 60s * $0.000111/s = $0.00666
-      expect(cost).toBeCloseTo(0.00666, 4);
+      // A minute at $0.22/hour
+      expect(cost).toBeCloseTo(0.22 / 60, 6);
     });
 
     it('estimates cost for 0 duration', () => {
@@ -25,14 +25,13 @@ describe('ElevenLabsProvider', () => {
     it('estimates cost for 1 hour', () => {
       const provider = new ElevenLabsProvider(async () => 'test-key');
       const cost = provider.estimateCost(3600000);
-      // 3600s * $0.000111/s = $0.3996
-      expect(cost).toBeCloseTo(0.3996, 3);
+      expect(cost).toBeCloseTo(0.22, 6);
     });
 
     it('estimates cost for 1 second', () => {
       const provider = new ElevenLabsProvider(async () => 'test-key');
       const cost = provider.estimateCost(1000);
-      expect(cost).toBeCloseTo(0.000111, 6);
+      expect(cost).toBeCloseTo(0.22 / 3600, 9);
     });
   });
 

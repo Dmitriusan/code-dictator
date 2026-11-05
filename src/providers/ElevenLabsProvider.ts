@@ -1,7 +1,7 @@
 import type { STTProvider, TranscribeOptions, TranscriptionResult } from '../types';
 
 const ENDPOINT = 'https://api.elevenlabs.io/v1/speech-to-text';
-const COST_PER_SECOND = 0.000111; // $0.40/hour
+const COST_PER_SECOND = 0.22 / 3600; // Scribe v2 through the API: $0.22/hour on every plan
 
 const DEFAULT_MODEL = 'scribe_v2';
 

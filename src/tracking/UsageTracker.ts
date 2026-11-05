@@ -31,37 +31,31 @@ export class UsageTracker {
   getStats(): UsageStats {
     return this.storage.getUsageStats();
   }
+}
 
-  formatCost(cost: number): string {
-    if (cost === 0) {
-      return 'Free';
-    }
-    if (cost < 0.01) {
-      return `$${cost.toFixed(4)}`;
-    }
-    return `$${cost.toFixed(2)}`;
+/** An estimated cost: "Free", "$0.0042", "$1.50". */
+export function formatCost(cost: number): string {
+  if (cost === 0) {
+    return 'Free';
   }
+  if (cost < 0.01) {
+    return `$${cost.toFixed(4)}`;
+  }
+  return `$${cost.toFixed(2)}`;
+}
 
-  getStatusBarText(): string {
-    const stats = this.getStats();
-    if (stats.todayEstimatedCost === 0 && stats.todayTranscriptions === 0) {
-      return '';
-    }
-    return `$(credit-card) ${this.formatCost(stats.todayEstimatedCost)}`;
+/** A recording length: "5s", "1m 5s", "1h 30m". */
+export function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
   }
-
-  formatDuration(ms: number): string {
-    const seconds = Math.floor(ms / 1000);
-    if (seconds < 60) {
-      return `${seconds}s`;
-    }
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes < 60) {
-      return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
-    }
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return `${hours}h ${remainingMinutes}m`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) {
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
   }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
 }

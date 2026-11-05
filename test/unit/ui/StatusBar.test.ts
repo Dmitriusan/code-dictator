@@ -5,7 +5,7 @@ const mockStatusBarItems: Array<ReturnType<typeof createItem>> = [];
 function createItem() {
   return {
     text: '',
-    tooltip: '',
+    tooltip: '' as unknown,
     command: undefined as string | undefined,
     name: undefined as string | undefined,
     backgroundColor: undefined as unknown,
@@ -53,6 +53,10 @@ vi.mock('vscode', () => ({
   },
   StatusBarAlignment: { Left: 1, Right: 2 },
   ThemeColor: vi.fn(function (this: { id: string }, id: string) { this.id = id; }),
+  MarkdownString: vi.fn(function (this: { value: string; supportThemeIcons: boolean }, value: string, supportThemeIcons: boolean) {
+    this.value = value;
+    this.supportThemeIcons = supportThemeIcons;
+  }),
 }));
 
 import { StatusBar } from '../../../src/ui/StatusBar';
@@ -61,16 +65,16 @@ describe('StatusBar', () => {
   let statusBar: StatusBar;
   let micButton: ReturnType<typeof createItem>;
   let langIndicator: ReturnType<typeof createItem>;
-  let costIndicator: ReturnType<typeof createItem>;
+  let usageIndicator: ReturnType<typeof createItem>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     mockStatusBarItems.length = 0;
     statusBar = new StatusBar();
-    // Constructor creates 3 items: mic, language, cost
+    // Constructor creates 3 items: mic, language, speech-to-text usage
     micButton = mockStatusBarItems[0];
     langIndicator = mockStatusBarItems[1];
-    costIndicator = mockStatusBarItems[2];
+    usageIndicator = mockStatusBarItems[2];
   });
 
   afterEach(() => {
@@ -90,7 +94,8 @@ describe('StatusBar', () => {
     it('sets correct commands on items', () => {
       expect(micButton.command).toBe('codeDictator.toggleRecording');
       expect(langIndicator.command).toBe('codeDictator.selectLanguage');
-      expect(costIndicator.command).toBe('codeDictator.showUsage');
+      expect(usageIndicator.command).toBe('codeDictator.showUsage');
+      expect(usageIndicator.name).toBe('Code Dictator: Speech-to-Text Usage');
     });
   });
 
@@ -150,21 +155,30 @@ describe('StatusBar', () => {
     });
   });
 
-  describe('updateCost()', () => {
-    it('shows cost indicator when enabled', () => {
-      statusBar.updateCost('$(credit-card) $0.02', true);
-      expect(costIndicator.text).toBe('$(credit-card) $0.02');
-      expect(costIndicator.show).toHaveBeenCalled();
+  describe('updateUsage()', () => {
+    it('shows the text, and the tooltip as Markdown with theme icons', () => {
+      statusBar.updateUsage({ text: '$(credit-card) 96.4K · ~80h', tooltip: '**ElevenLabs credits left: 96,412**' });
+      expect(usageIndicator.text).toBe('$(credit-card) 96.4K · ~80h');
+      expect(usageIndicator.tooltip).toEqual({ value: '**ElevenLabs credits left: 96,412**', supportThemeIcons: true });
+      expect(usageIndicator.backgroundColor).toBeUndefined();
+      expect(usageIndicator.show).toHaveBeenCalled();
     });
 
-    it('hides cost indicator when disabled', () => {
-      statusBar.updateCost('$(credit-card) $0.02', false);
-      expect(costIndicator.hide).toHaveBeenCalled();
+    it('asks for attention with the warning or error background', () => {
+      statusBar.updateUsage({ text: '$(credit-card) 450 · ~21m', tooltip: 'low', level: 'warning' });
+      expect(usageIndicator.backgroundColor).toEqual({ id: 'statusBarItem.warningBackground' });
+
+      statusBar.updateUsage({ text: '$(credit-card) No credits', tooltip: 'none', level: 'error' });
+      expect(usageIndicator.backgroundColor).toEqual({ id: 'statusBarItem.errorBackground' });
+
+      statusBar.updateUsage({ text: '$(credit-card) 96.4K · ~80h', tooltip: 'plenty' });
+      expect(usageIndicator.backgroundColor).toBeUndefined();
     });
 
-    it('hides cost indicator when text is empty', () => {
-      statusBar.updateCost('', true);
-      expect(costIndicator.hide).toHaveBeenCalled();
+    it('hides the item when there is nothing to show', () => {
+      statusBar.updateUsage({ text: '$(credit-card) $0.02', tooltip: 'cost' });
+      statusBar.updateUsage(undefined);
+      expect(usageIndicator.hide).toHaveBeenCalled();
     });
   });
 
@@ -205,7 +219,7 @@ describe('StatusBar', () => {
       statusBar.hide();
       expect(micButton.hide).toHaveBeenCalled();
       expect(langIndicator.hide).toHaveBeenCalled();
-      expect(costIndicator.hide).toHaveBeenCalled();
+      expect(usageIndicator.hide).toHaveBeenCalled();
     });
   });
 
@@ -214,7 +228,7 @@ describe('StatusBar', () => {
       statusBar.dispose();
       expect(micButton.dispose).toHaveBeenCalled();
       expect(langIndicator.dispose).toHaveBeenCalled();
-      expect(costIndicator.dispose).toHaveBeenCalled();
+      expect(usageIndicator.dispose).toHaveBeenCalled();
     });
 
     it('clears recording timer', () => {

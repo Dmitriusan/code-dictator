@@ -60,7 +60,7 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 | **Speaks your language** | Accurate speech-to-text in 90+ languages with ElevenLabs — not just English. Auto-detected; switch with one click. |
 | **Code-aware mode** | Say "open paren" and get `(`. 50+ symbol mappings. |
 | **AI text cleanup** | Optional LLM pass removes filler words and fixes grammar |
-| **Cost tracking** | See your spend in the status bar. Know exactly what you're paying. |
+| **Usage at a glance** | With ElevenLabs, the status bar shows the credits left in your subscription and about how many hours of dictation they buy. With other providers, today's estimated speech-to-text cost. |
 | **Cross-platform** | macOS, Windows, Linux. Records with a system tool on each — see [Requirements](#requirements). |
 | **Privacy-first** | No telemetry. No data collection. API keys in your OS keychain. |
 
@@ -73,7 +73,7 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 | **Models** | Scribe v2 | GPT Transcribe | Any Whisper-compatible |
 | **Accuracy** | Excellent | Very good | Model-dependent |
 | **Languages** | 90+ | 57 | Varies |
-| **Free tier** | **Yes** (2.5 hrs/month) | No | N/A |
+| **Free tier** | **Yes** (4.5 hrs/month) | No | N/A |
 | **Latency** | ~1-2s | ~1-3s | Varies |
 | **Best for** | Most developers | Existing OpenAI users | Privacy / self-hosted |
 
@@ -91,7 +91,7 @@ Code Dictator is **free and open-source**. You only pay for the speech-to-text A
 
 | Provider | Cost |
 |---|---|
-| ElevenLabs | **Free tier** (2.5 hrs/month), then ~$0.40/hr |
+| ElevenLabs | **Free tier** (4.5 hrs/month), then $0.22/hr |
 | OpenAI | See [OpenAI pricing](https://openai.com/api/pricing/) |
 | Custom / Local | Free |
 
@@ -166,7 +166,7 @@ Settings are grouped into sections in the VS Code Settings UI.
 
 | Setting | Default | Description |
 |---|---|---|
-| `feedback.showCost` | `true` | Cost in status bar |
+| `feedback.showCost` | `true` | ElevenLabs credits left, or today's speech-to-text cost, in the status bar |
 | `feedback.transcriptionSound` | `false` | Chime on completion |
 
 All settings under the `codeDictator.*` namespace.
@@ -203,6 +203,9 @@ Check that a recording tool is installed and that your system lets VS Code use t
 **Recording fails in Remote / SSH / WSL**
 Voice input requires a local VS Code window. Remote environments don't expose microphone access to extensions.
 
+**The status bar shows a cost instead of my ElevenLabs credits**
+Your API key may transcribe but not read your account. On elevenlabs.io, open your API keys, edit the key and set the **User** permission to **Read**. Hover over the item to see why the balance could not be read.
+
 **Transcription comes back empty**
 - Test your microphone in another app first
 - Verify your API key: run `Code Dictator: Set API Key` from the Command Palette
@@ -216,6 +219,7 @@ Speech-to-text models use context to identify the language. Longer utterances gi
 
 - API keys stored in your OS keychain — never on disk in plaintext
 - Audio sent only to your configured provider
+- With ElevenLabs, the credit balance in the status bar is read from your ElevenLabs account with your key (`feedback.showCost` turns it off)
 - No telemetry, no analytics, no data collection
 - No audio retained after transcription
 

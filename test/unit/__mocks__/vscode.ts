@@ -41,7 +41,7 @@ export function createMockExtensionContext() {
       get: vi.fn(async (key: string) => secretStore.get(key)),
       store: vi.fn(async (key: string, value: string) => { secretStore.set(key, value); }),
       delete: vi.fn(async (key: string) => { secretStore.delete(key); }),
-      onDidChange: vi.fn(),
+      onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     },
     globalState: {
       get: vi.fn(<T>(key: string, defaultValue?: T): T => {
@@ -116,6 +116,7 @@ const vscode = {
       dispose: vi.fn(),
     })),
     createWebviewPanel: vi.fn(() => createMockWebviewPanel()),
+    onDidChangeWindowState: vi.fn(() => ({ dispose: vi.fn() })),
   },
   workspace: {
     getConfiguration: vi.fn(() => createMockConfiguration()),
@@ -150,6 +151,10 @@ const vscode = {
   },
   ThemeColor: vi.fn(function (this: { id: string }, id: string) {
     this.id = id;
+  }),
+  MarkdownString: vi.fn(function (this: { value: string; supportThemeIcons: boolean }, value = '', supportThemeIcons = false) {
+    this.value = value;
+    this.supportThemeIcons = supportThemeIcons;
   }),
   ConfigurationTarget: {
     Global: 1,

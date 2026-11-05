@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for Claude Code, Copilot, Cline, or any AI chat in VS Code — 90+ languages, powered by ElevenLabs. Press Alt+D, talk, paste.",
-  "version": "1.1.27",
+  "version": "1.1.28",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -88,7 +88,7 @@
       },
       {
         "command": "codeDictator.showUsage",
-        "title": "Code Dictator: Show Usage & Costs",
+        "title": "Code Dictator: Show Speech-to-Text Usage",
         "icon": "$(dashboard)"
       },
       {
@@ -472,7 +472,7 @@
             "order": 1,
             "type": "boolean",
             "default": true,
-            "description": "Show estimated cost in status bar"
+            "description": "Show speech-to-text usage in the status bar: the credits left in your ElevenLabs subscription, or today's estimated cost with OpenAI and custom endpoints"
           },
           "codeDictator.feedback.flashDuration": {
             "order": 2,

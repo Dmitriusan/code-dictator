@@ -218,6 +218,16 @@ export const SCENARIOS: readonly ScenarioUnit[] = [
     records: true,
     timeoutMs: 30_000,
   },
+  {
+    // A window of its own: the ElevenLabs key it stores would configure ElevenLabs for later units
+    id: 'elevenlabs-balance',
+    scenario: 'elevenlabs-balance',
+    title: 'With ElevenLabs the status bar shows the credits left, read again after a dictation',
+    kind: 'regular',
+    freshWindow: true,
+    records: true,
+    timeoutMs: 30_000,
+  },
 ];
 
 /** Units matching E2E_SCENARIOS ("id" or "scenario", comma separated); all units when it is empty. */

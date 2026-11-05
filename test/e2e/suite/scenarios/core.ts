@@ -37,11 +37,11 @@ export const harnessGuards: Scenario = async ({ h, expect, observe }) => {
 
   // Captured because the hooks were installed before the extension activated
   const items = h.statusBar.items.map((r) => r.name);
-  expect(show(items) === show(['Code Dictator: Mic', 'Code Dictator: Language', 'Code Dictator: Cost']), `status bar items captured: ${show(items)}`);
+  expect(show(items) === show(['Code Dictator: Mic', 'Code Dictator: Language', 'Code Dictator: Speech-to-Text Usage']), `status bar items captured: ${show(items)}`);
   const mic = h.statusBar.named('Code Dictator: Mic');
   expect(mic?.item.text === MIC_IDLE && mic.visible, `mic item ${show({ text: mic?.item.text, visible: mic?.visible })}`);
   expect(h.statusBar.named('Code Dictator: Language')?.visible === false, 'the language item is visible although the language is auto-detected');
-  expect(h.statusBar.named('Code Dictator: Cost')?.visible === false, 'the cost item is visible before any transcription');
+  expect(h.statusBar.named('Code Dictator: Speech-to-Text Usage')?.visible === false, 'the usage item is visible before any transcription');
   expect(h.commands.contextValues('isRecording')[0] === false && h.commands.contextValues('isProcessing')[0] === false,
     `context keys at activation: ${show(h.commands.contexts)}`);
 
