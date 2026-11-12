@@ -56,6 +56,7 @@ You spend hours a day writing prompts for AI coding assistants. That's not codin
 | | What you get |
 |---|---|
 | **Push-to-talk** | `Alt+D` to start, `Alt+D` to stop. Or hold-to-talk mode. |
+| **Quick on long dictations** | Optional: long dictations are transcribed in parts while you speak, so the text is ready a second or two after you stop. Costs about 10–25% more. |
 | **Any AI assistant** | Claude, Copilot, Cline, terminal — paste anywhere |
 | **Speaks your language** | Accurate speech-to-text in 90+ languages with ElevenLabs — not just English. Auto-detected; switch with one click. |
 | **Code-aware mode** | Say "open paren" and get `(`. 50+ symbol mappings. |
@@ -122,6 +123,8 @@ When enabled (default), spoken programming terms become symbols:
 | Toggle recording | `Alt+D` |
 | Cancel recording | `Escape` (while recording) |
 
+Escape discards the dictation and inserts nothing. With `recording.transcribeWhileSpeaking` on, the parts of a long dictation already sent while you spoke have been transcribed and are billed by your provider.
+
 Customize in Keyboard Shortcuts (`Ctrl+K Ctrl+S`). **For a true push-to-talk feel, rebind toggle recording to a single key you never use — `Pause/Break`, `ScrollLock`, or a spare mouse button work great as a dedicated dictation key.**
 
 ---
@@ -154,6 +157,7 @@ Settings are grouped into sections in the VS Code Settings UI.
 | `recording.mode` | `toggle` | `toggle` or `hold` |
 | `recording.maxDuration` | `300` | Max seconds (10-3600) |
 | `recording.silenceTimeout` | `0` | Auto-stop on silence (0 = off; needs `parecord` or `arecord` on Linux) |
+| `recording.transcribeWhileSpeaking` | `false` | Transcribe long dictations (from about 50 seconds) in parts while you speak; costs about 10–25% more |
 
 **Output**
 
@@ -176,6 +180,8 @@ All settings under the `codeDictator.*` namespace.
 ## How It Works
 
 Code Dictator records with a tool on your system, because VS Code does not give extensions' web views access to the microphone ([microsoft/vscode#113916](https://github.com/microsoft/vscode/issues/113916)). It auto-detects what is installed: `parecord` / `pw-record` (PulseAudio/PipeWire — so Bluetooth mics work) or `arecord` (ALSA) on Linux, SoX on macOS, ffmpeg on Windows. You don't configure anything: once a tool is installed (see [Requirements](#requirements)), it just works.
+
+**Long dictations** can be transcribed in parts while you speak (`recording.transcribeWhileSpeaking`, off by default). From 40 seconds into a recording, Code Dictator cuts it at a pause in your speech (by 65 seconds at the latest), then about every 20 to 45 seconds, and sends each part while you go on talking. With the language on auto-detect, a part waits until you have said another 6 seconds or so after it, so the last part is never too short for its language to be recognised; in practice the first part goes out about 50 seconds into a dictation (sooner after a pause of 2 seconds or more), or about 55 with auto-detect. Each part goes with 2.5 seconds of audio on either side of its cuts, so the speech-to-text service hears how a sentence goes on and does not end it at the cut. Each word is then kept from one part only: by its timestamp with ElevenLabs, and with other providers by joining the two texts in the middle of the words both parts heard; when two parts' texts share no words although both heard speech there, the whole recording is sent when you stop instead. That shared audio is billed twice, about 10 to 25% more for a long dictation. When you stop, only the last part is left to transcribe, and the texts are joined. Shorter dictations are sent whole when you stop, exactly as with the setting off. If the last part cannot be transcribed, the recording is kept for Retry, which sends all of it again, so the parts already transcribed are billed twice; the same happens when you change the language, the provider or its API key during a dictation.
 
 **Adaptive silence detection** (when enabled; on Linux with `parecord` or `arecord`) uses dual exponential moving averages to track your noise floor and speech energy in real-time. No calibration needed — it adapts to your microphone and environment automatically. See the [technical reference](docs/voice-activity-detection.md) for details.
 
@@ -218,7 +224,7 @@ Speech-to-text models use context to identify the language. Longer utterances gi
 ## Privacy
 
 - API keys stored in your OS keychain — never on disk in plaintext
-- Audio sent only to your configured provider
+- Audio sent only to your configured provider: when you stop or, with `recording.transcribeWhileSpeaking` on, in parts while you speak in long dictations. Parts already sent are billed even if you cancel with Escape.
 - With ElevenLabs, the credit balance in the status bar is read from your ElevenLabs account with your key (`feedback.showCost` turns it off)
 - No telemetry, no analytics, no data collection
 - No audio retained after transcription

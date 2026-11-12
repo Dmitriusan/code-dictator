@@ -24,6 +24,8 @@ const PRICE_WEIGHT_SECONDS = 30;
 const MAX_CREDITS_PER_MINUTE = 400;
 /** Measured charges fade out after about this much dictation, so a new price shows. */
 const MEASURED_SECONDS_CAP = 4 * 3600;
+/** Credits below this share of what the dictation since the last reading should cost: part of the charge may not show yet. */
+const SHORT_CHARGE = 0.8;
 
 /** API errors that mean the key works but may not read the account (it lacks `user_read`). */
 const PERMISSION_CODES = new Set(['missing_permissions', 'insufficient_permissions']);
@@ -65,8 +67,8 @@ export type BalanceProblem =
 interface CreditMeter {
   /** Seconds of audio Code Dictator has had transcribed, in total. */
   audioSeconds: number;
-  /** The reading the next measurement starts from. */
-  mark?: { used: number; audioSeconds: number; period: string };
+  /** The reading the next measurement starts from; `waited` once a reading found its charge short and waited for the next. */
+  mark?: { used: number; audioSeconds: number; period: string; waited?: boolean };
   /** Credits charged for `seconds` of dictation. */
   credits: number;
   seconds: number;
@@ -201,6 +203,14 @@ export class ElevenLabsBalance {
       const seconds = meter.audioSeconds - mark.audioSeconds;
       if (seconds > 0 && credits === 0) {
         return; // the charge has not shown yet: measure it from the same mark next time
+      }
+      // A dictation transcribed in parts is read 15 s after its last part: that charge may still not
+      // show, while the earlier parts' did. Measured now, its credits would come later with no dictation
+      // to count them against. Wait for one more reading, once.
+      const expected = (seconds / 60) * this.rate().creditsPerMinute;
+      if (seconds > 0 && credits < SHORT_CHARGE * expected && !mark.waited) {
+        await this.state.update(METER_KEY, { ...meter, mark: { ...mark, waited: true } });
+        return;
       }
       // Credits used with no dictation, or far more than dictation costs, went to something else
       if (seconds > 0 && (credits / seconds) * 60 <= MAX_CREDITS_PER_MINUTE) {

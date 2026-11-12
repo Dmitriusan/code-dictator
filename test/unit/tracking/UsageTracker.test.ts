@@ -126,6 +126,16 @@ describe('UsageTracker', () => {
       expect(storage.recordUsage).toHaveBeenCalledWith(5000, 0.001);
     });
 
+    it('keeps the recording length in the history and counts what was transcribed of it in the usage', async () => {
+      const storage = createMockStorage();
+      const tracker = new UsageTracker(storage);
+
+      await tracker.record({ text: 'a long dictation', cost: 0.006 }, 'elevenlabs', 90_000, 80_000);
+
+      expect((storage.addToHistory as ReturnType<typeof vi.fn>).mock.calls[0][0].duration).toBe(90_000);
+      expect(storage.recordUsage).toHaveBeenCalledWith(80_000, 0.006);
+    });
+
     it('defaults cost to 0 when not provided', async () => {
       const storage = createMockStorage();
       const tracker = new UsageTracker(storage);

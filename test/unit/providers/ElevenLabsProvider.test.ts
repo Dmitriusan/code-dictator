@@ -412,6 +412,26 @@ describe('ElevenLabsProvider', () => {
       );
     });
 
+    it('returns each word with its timing, spacing and sound tags included, for joining the parts of a dictation', async () => {
+      const answer = (words: unknown[]) => vi.fn().mockResolvedValue({ ok: true, json: async () => ({ text: 'Hi (laughs)', words }) });
+      const provider = new ElevenLabsProvider(async () => 'test-api-key-12345');
+      globalThis.fetch = answer([
+        { text: 'Hi', start: 0.1, end: 0.4, type: 'word', logprob: -0.1 },
+        { text: ' ', start: null, end: null, type: 'spacing' },
+        { text: '(laughs)', start: 0.5, end: 1.1, type: 'audio_event' },
+      ]);
+
+      expect((await provider.transcribe(Buffer.from('audio'), {})).words).toEqual([
+        { text: 'Hi', start: 0.1, end: 0.4, type: 'word' },
+        { text: ' ', start: 0, end: 0, type: 'spacing' },
+        { text: '(laughs)', start: 0.5, end: 1.1, type: 'audio_event' },
+      ]);
+
+      // A word without its timing could not be placed, and would be lost: then no words at all
+      globalThis.fetch = answer([{ text: 'Hi', start: null, end: null, type: 'word' }, { text: '(laughs)', start: 0.5, end: 1.1, type: 'audio_event' }]);
+      expect((await provider.transcribe(Buffer.from('audio'), {})).words).toBeUndefined();
+    });
+
     it('calculates duration from word timestamps', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,

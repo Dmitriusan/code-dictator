@@ -231,6 +231,28 @@ describe('ElevenLabsBalance', () => {
       expect(balance.rate()).toEqual({ creditsPerMinute: 37, measuredSeconds: 0 });
     });
 
+    it('waits one more reading when only part of a dictation sent in parts shows, so its last part is not lost', async () => {
+      await readAt(1000);
+      await balance.noteTranscribed(60); // the part sent while recording
+      await balance.noteTranscribed(30); // the rest, read 15 s after it came back
+      await readAt(1020); // only the first part's 20 credits show
+
+      expect(balance.rate().measuredSeconds).toBe(0);
+      await readAt(1030); // and now the rest's 10
+      expect(balance.rate().measuredSeconds).toBe(90);
+      expect(balance.rate().creditsPerMinute).toBeCloseTo((30 * 60 + 21 * 30) / 120, 6);
+    });
+
+    it('waits only once: a charge still short at the next reading is measured as it shows', async () => {
+      await readAt(1000);
+      await balance.noteTranscribed(90);
+      await readAt(1020);
+      await readAt(1020);
+
+      expect(balance.rate().measuredSeconds).toBe(90);
+      expect(balance.rate().creditsPerMinute).toBeCloseTo((20 * 60 + 21 * 30) / 120, 6);
+    });
+
     it('moves to what the dictation was charged', async () => {
       await readAt(1000);
       await balance.noteTranscribed(60);

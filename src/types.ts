@@ -9,6 +9,15 @@ export interface TranscribeOptions {
   onRetry?: (reason: string, delayMs: number) => void;
 }
 
+/** A word (or the spacing between words) with when it was said, in seconds from the start of the audio. */
+export interface TranscribedWord {
+  text: string;
+  start: number;
+  end: number;
+  /** 'word', 'spacing' or 'audio_event' (ElevenLabs). */
+  type?: string;
+}
+
 export interface TranscriptionResult {
   text: string;
   /** Detected language, as an ISO 639-1 code ("uk") where the language has one. */
@@ -16,6 +25,8 @@ export interface TranscriptionResult {
   duration?: number;
   confidence?: number;
   cost?: number;
+  /** The text word by word with timestamps, from providers that return them (ElevenLabs). */
+  words?: TranscribedWord[];
 }
 
 export interface STTProvider {
@@ -58,6 +69,8 @@ export interface CodeDictatorSettings {
   showCostIndicator: boolean;
   maxRecordingDuration: number;
   silenceTimeout: number;
+  /** Transcribe long dictations in parts while the user is still speaking. */
+  transcribeWhileSpeaking: boolean;
   diagnosticLogging: boolean;
 }
 

@@ -1,3 +1,5 @@
+import { parseWavLayout, wavDataEnd } from './Wav';
+
 /** Quieter than any live microphone; real speech and ambient noise sit far above it. */
 const SILENCE_DBFS = -80;
 /** Loudness is judged per window, the same 100 ms granularity as the native recorder's VAD. */
@@ -51,38 +53,17 @@ interface Pcm16Data {
 }
 
 /**
- * Locate the samples of a 16-bit PCM WAV by walking its RIFF chunks — they
- * don't always start at byte 44 (ffmpeg writes a LIST chunk before `data`).
- * Returns null for anything else, including compressed webm/ogg.
+ * Locate the samples of a 16-bit PCM WAV (see parseWavLayout: they don't
+ * always start at byte 44). Returns null for anything else, including
+ * compressed webm/ogg.
  */
 function findPcm16Data(buffer: Buffer): Pcm16Data | null {
-  if (buffer.length < 12 || buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE') {
-    return null;
-  }
-
-  let samplesPerSecond = 0;
-  for (let pos = 12; pos + 8 <= buffer.length;) {
-    const chunkId = buffer.toString('ascii', pos, pos + 4);
-    const chunkSize = buffer.readUInt32LE(pos + 4);
-    const body = pos + 8;
-
-    if (chunkId === 'fmt ') {
-      if (body + 16 > buffer.length) return null;
-      const audioFormat = buffer.readUInt16LE(body);
-      const bitsPerSample = buffer.readUInt16LE(body + 14);
-      // 1 = PCM; 0xFFFE = WAVE_FORMAT_EXTENSIBLE, which at 16 bits is integer PCM too
-      if ((audioFormat !== 1 && audioFormat !== 0xFFFE) || bitsPerSample !== 16) return null;
-      samplesPerSecond = buffer.readUInt32LE(body + 4) * buffer.readUInt16LE(body + 2);
-    } else if (chunkId === 'data') {
-      if (samplesPerSecond === 0) return null;
-      // A header written before recording started (or never finalized) can
-      // declare 0 or a placeholder maximum — the bytes actually present count.
-      const declaredEnd = body + chunkSize;
-      const end = chunkSize > 0 && declaredEnd <= buffer.length ? declaredEnd : buffer.length;
-      return { start: body, end, samplesPerSecond };
-    }
-
-    pos = body + chunkSize + (chunkSize % 2); // chunks are word-aligned
-  }
-  return null;
+  const layout = parseWavLayout(buffer);
+  // 1 = PCM; 0xFFFE = WAVE_FORMAT_EXTENSIBLE, which at 16 bits is integer PCM too
+  if (!layout || (layout.format !== 1 && layout.format !== 0xFFFE) || layout.bitsPerSample !== 16) return null;
+  const samplesPerSecond = layout.sampleRate * layout.channels;
+  if (samplesPerSecond === 0) return null;
+  // A header written before recording started (or never finalized) can
+  // declare 0 or a placeholder maximum — the bytes actually present count.
+  return { start: layout.dataStart, end: wavDataEnd(layout, buffer.length), samplesPerSecond };
 }

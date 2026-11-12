@@ -139,6 +139,14 @@ export const SCENARIOS: readonly ScenarioUnit[] = [
     timeoutMs: 30_000,
   },
   {
+    id: 'live-transcription',
+    scenario: 'live-transcription',
+    title: 'A long dictation is transcribed in parts while speaking: 5 s shared at each cut, joined text, setting off, failing parts, Escape',
+    kind: 'regular',
+    records: true,
+    timeoutMs: 120_000,
+  },
+  {
     id: 'escape-during-startup',
     scenario: 'escape-during-startup',
     title: 'Escape while the recorder is still starting, in toggle and hold mode',

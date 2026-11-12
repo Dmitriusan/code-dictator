@@ -1,4 +1,4 @@
-import type { STTProvider, TranscribeOptions, TranscriptionResult } from '../types';
+import type { STTProvider, TranscribedWord, TranscribeOptions, TranscriptionResult } from '../types';
 
 const ENDPOINT = 'https://api.elevenlabs.io/v1/speech-to-text';
 const COST_PER_SECOND = 0.22 / 3600; // Scribe v2 through the API: $0.22/hour on every plan
@@ -43,6 +43,33 @@ const ISO_639_1: Record<string, string> = {
   tam: 'ta', tel: 'te', tgk: 'tg', tha: 'th', tur: 'tr', ukr: 'uk', urd: 'ur', uzb: 'uz',
   vie: 'vi', wol: 'wo', xho: 'xh', yor: 'yo', yue: 'zh', zho: 'zh', zul: 'zu',
 };
+
+/**
+ * The words of an answer with their timings, for joining the parts of a
+ * dictation transcribed while it was recorded. Undefined unless every word
+ * (and sound tag) has its start and end: a word without them could not be
+ * placed, and would be lost. Spacing is kept as it is.
+ */
+function timedWords(words: unknown): TranscribedWord[] | undefined {
+  if (!Array.isArray(words)) {
+    return undefined;
+  }
+  const timed: TranscribedWord[] = [];
+  for (const w of words as Array<{ text?: unknown; start?: unknown; end?: unknown; type?: unknown }>) {
+    if (typeof w?.text !== 'string') {
+      return undefined;
+    }
+    const type = typeof w.type === 'string' ? w.type : undefined;
+    if (typeof w.start === 'number' && typeof w.end === 'number') {
+      timed.push({ text: w.text, start: w.start, end: w.end, type });
+    } else if (type === 'spacing') {
+      timed.push({ text: w.text, start: 0, end: 0, type });
+    } else {
+      return undefined;
+    }
+  }
+  return timed;
+}
 
 /** Resolve after `ms`, or reject right away if the request is cancelled meanwhile. */
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
@@ -156,7 +183,7 @@ export class ElevenLabsProvider implements STTProvider {
       text?: string;
       language_code?: string;
       language_probability?: number;
-      words?: Array<{ start: number; end: number; text: string }>;
+      words?: Array<{ start: number; end: number; text: string; type?: string }>;
     };
 
     if (!data.text && data.text !== '') {
@@ -181,6 +208,7 @@ export class ElevenLabsProvider implements STTProvider {
       confidence: data.language_probability,
       duration,
       cost,
+      words: timedWords(data.words),
     };
   }
 

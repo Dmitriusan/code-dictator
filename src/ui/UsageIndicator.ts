@@ -73,7 +73,7 @@ export function costView(stats: UsageStats, provider: ProviderType, problem?: Ba
   lines.push(`${plural(stats.todayTranscriptions, 'transcription')} · ${formatDuration(stats.todayDurationMs)} of audio`);
   lines.push(cost === 0 && provider === 'custom'
     ? 'Code Dictator does not know what your own endpoint costs. Click for this week and all time.'
-    : `Code Dictator's estimate from the length of today's recordings and ${PRICE_OWNERS[provider]} price for transcription. It is not read from your account, and AI cleanup is not included. Click for this week and all time.`);
+    : `Code Dictator's estimate from the audio sent today and ${PRICE_OWNERS[provider]} price for transcription. It is not read from your account, and AI cleanup is not included. Click for this week and all time.`);
   if (provider === 'elevenlabs' && problem) {
     lines.push('---');
     lines.push(balanceProblemHint(problem));

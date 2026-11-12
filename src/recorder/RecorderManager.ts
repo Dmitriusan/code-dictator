@@ -5,6 +5,12 @@ import { getRecorderWebviewContent, MIC_PERMISSION_DENIED } from './RecorderWebv
 import { NativeRecorder, type AudioDiagnostics } from './NativeRecorder';
 import { NoRecorderError } from './NoRecorderError';
 import { diagLog } from '../DiagnosticLog';
+import type { LiveTranscription } from '../transcription/LiveTranscription';
+
+/** A stopped recording, with the live transcription that followed it (see setLiveTranscription). */
+export interface RecordedAudio extends AudioDataPayload {
+  live?: LiveTranscription;
+}
 
 type RecorderEvent = 'recordingStarted' | 'recordingStopped' | 'audioData' | 'error' | 'silenceDetected' | 'trackEnded';
 
@@ -34,8 +40,22 @@ export class RecorderManager implements vscode.Disposable {
   // cancelled yet, so cancelRecording() marks the start and the start cancels
   // the recorder as soon as it runs.
   private nativeStart: { cancelled: boolean } | undefined;
+  // Starts a live transcription of each native recording (see setLiveTranscription)
+  private liveFactory: ((file: string) => LiveTranscription | undefined) | undefined;
+  // The live transcription of the native recording in progress, with the recorder it follows
+  private live: { recorder: NativeRecorder; session: LiveTranscription } | undefined;
 
   constructor(private readonly extensionUri: vscode.Uri) {}
+
+  /**
+   * Have every native recording followed while it records: `factory` gets the
+   * file the recorder writes and returns the live transcription that reads it,
+   * or undefined for none. stopRecording() hands it over with the audio;
+   * a recording that is cancelled, lost or fails to stop cancels it.
+   */
+  setLiveTranscription(factory: (file: string) => LiveTranscription | undefined): void {
+    this.liveFactory = factory;
+  }
 
   get isRecording(): boolean {
     return this._isRecording;
@@ -172,6 +192,7 @@ export class RecorderManager implements vscode.Disposable {
     // If the native process exits unexpectedly, stop recording and report
     recorder.setUnexpectedExitHandler(() => {
       diagLog('RecorderManager', 'Native recorder exited unexpectedly — stopping');
+      this.dropLive(recorder);
       this._isRecording = false;
       this.emit('error', 'Recording process exited unexpectedly. Enable diagnostic logging in settings for details.');
     });
@@ -204,6 +225,7 @@ export class RecorderManager implements vscode.Disposable {
           diagLog('RecorderManager', 'Auto-cancelling recording — no audio data after 4s');
           this.emit('trackEnded', diagnostics);
           this.clearMaxDurationTimeout();
+          this.dropLive(recorder);
           recorder.cancel();
           this.nativeRecorder = null;
           this._isRecording = false;
@@ -231,6 +253,7 @@ export class RecorderManager implements vscode.Disposable {
     }
     this._isRecording = true;
     diagLog('RecorderManager', `Started native recording, silenceTimeout=${silenceTimeout}s`);
+    this.startLive(recorder);
     this.emit('recordingStarted');
 
     // Max duration enforcement — clear any stale timeout first
@@ -258,7 +281,11 @@ export class RecorderManager implements vscode.Disposable {
     }
   }
 
-  async stopRecording(): Promise<AudioDataPayload> {
+  /**
+   * Stop and return the recording. `signal` is the transcription pipeline's:
+   * a live transcription handed over with the audio is cancelled when it aborts.
+   */
+  async stopRecording(signal?: AbortSignal): Promise<RecordedAudio> {
     diagLog('RecorderManager', `stopRecording called. maxDurationTimeout=${this.maxDurationTimeout !== undefined ? 'SET' : 'NONE'}, isRecording=${this._isRecording}`);
     this.clearMaxDurationTimeout();
 
@@ -276,13 +303,23 @@ export class RecorderManager implements vscode.Disposable {
     const recorder = this.nativeRecorder;
     if (recorder?.isRecording) {
       this._isRecording = false;
-      const result = await recorder.stop();
+      const live = this.takeLive(recorder);
+      let result: AudioDataPayload;
+      // It stops reading the file the recorder is about to delete, and from
+      // now on belongs to the pipeline, whose Escape cancels it
+      live?.detach(signal);
+      try {
+        result = await recorder.stop();
+      } catch (error) {
+        live?.cancel();
+        throw error;
+      }
       // A recording started while this one was stopping stays tracked, so
       // stop, Escape and dispose still reach it
       if (this.nativeRecorder === recorder) {
         this.nativeRecorder = null;
       }
-      return result;
+      return live ? { ...result, live } : result;
     }
 
     if (!this._isRecording || !this.panel) {
@@ -338,6 +375,7 @@ export class RecorderManager implements vscode.Disposable {
 
     // Native recording path
     if (this.nativeRecorder?.isRecording) {
+      this.dropLive(this.nativeRecorder);
       this.nativeRecorder.cancel();
       this.nativeRecorder = null;
       this._isRecording = false;
@@ -365,6 +403,8 @@ export class RecorderManager implements vscode.Disposable {
 
   dispose(): void {
     this.cancelRecording();
+    this.live?.session.cancel();
+    this.live = undefined;
     if (this.nativeRecorder) {
       this.nativeRecorder.cancel();
       this.nativeRecorder = null;
@@ -378,6 +418,40 @@ export class RecorderManager implements vscode.Disposable {
     }
     this.disposables = [];
     this.listeners.clear();
+  }
+
+  /** Start following a native recording that has just started, if live transcription is on. */
+  private startLive(recorder: NativeRecorder): void {
+    const file = recorder.outputFile;
+    if (!this.liveFactory || !file) {
+      return;
+    }
+    // A previous recording's transcription that was never handed over goes now
+    this.live?.session.cancel();
+    this.live = undefined;
+    try {
+      const session = this.liveFactory(file);
+      if (session) {
+        this.live = { recorder, session };
+      }
+    } catch (error) {
+      diagLog('RecorderManager', `Live transcription not started: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** Hand over the live transcription of `recorder`'s recording, if it has one. */
+  private takeLive(recorder: NativeRecorder): LiveTranscription | undefined {
+    if (this.live?.recorder !== recorder) {
+      return undefined;
+    }
+    const { session } = this.live;
+    this.live = undefined;
+    return session;
+  }
+
+  /** `recorder`'s recording ends without transcription: so does its live transcription. */
+  private dropLive(recorder: NativeRecorder): void {
+    this.takeLive(recorder)?.cancel();
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

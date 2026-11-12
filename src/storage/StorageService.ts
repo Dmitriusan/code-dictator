@@ -116,6 +116,7 @@ export class StorageService {
       showCostIndicator: config.get<boolean>('feedback.showCost', true),
       maxRecordingDuration: config.get<number>('recording.maxDuration', 300),
       silenceTimeout: config.get<number>('recording.silenceTimeout', 0),
+      transcribeWhileSpeaking: config.get<boolean>('recording.transcribeWhileSpeaking', false),
       diagnosticLogging: config.get<boolean>('diagnosticLogging', false),
     };
   }
@@ -185,34 +186,40 @@ export class StorageService {
     return result;
   }
 
-  async recordUsage(durationMs: number, estimatedCost: number): Promise<void> {
+  /**
+   * Add a transcription's audio and cost to the usage stats. Audio billed
+   * without giving a transcription (parts of a dictation that was cancelled)
+   * passes `transcription: false`: it adds to the audio and cost, not to the count.
+   */
+  async recordUsage(durationMs: number, estimatedCost: number, transcription = true): Promise<void> {
     const today = getLocalDate();
     const weekStart = getWeekStart();
     const storedDate = this.context.globalState.get<string>(USAGE_DATE_KEY, '');
     const storedWeek = this.context.globalState.get<string>(USAGE_WEEK_KEY, '');
     const stats = this.getUsageStats();
+    const count = transcription ? 1 : 0;
 
     // If the stored date or week changed, getUsageStats already zeroed the counters
-    stats.totalTranscriptions += 1;
+    stats.totalTranscriptions += count;
     stats.totalDurationMs += durationMs;
     stats.totalEstimatedCost += estimatedCost;
 
     if (storedDate === today) {
-      stats.todayTranscriptions += 1;
+      stats.todayTranscriptions += count;
       stats.todayDurationMs += durationMs;
       stats.todayEstimatedCost += estimatedCost;
     } else {
-      stats.todayTranscriptions = 1;
+      stats.todayTranscriptions = count;
       stats.todayDurationMs = durationMs;
       stats.todayEstimatedCost = estimatedCost;
     }
 
     if (storedWeek === weekStart) {
-      stats.weekTranscriptions += 1;
+      stats.weekTranscriptions += count;
       stats.weekDurationMs += durationMs;
       stats.weekEstimatedCost += estimatedCost;
     } else {
-      stats.weekTranscriptions = 1;
+      stats.weekTranscriptions = count;
       stats.weekDurationMs = durationMs;
       stats.weekEstimatedCost = estimatedCost;
     }

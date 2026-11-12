@@ -13,17 +13,29 @@
  * File output (the last argument) is written in full at start, so its content
  * does not depend on timing. --raw output streams 100 ms chunks in real time,
  * as the silence detection expects.
+ *
+ * The `dictation` mode is the exception: it streams a long dictation into the
+ * file as it goes, the way parecord does through libsndfile (a header that
+ * declares no data, sizes filled in when the recorder is stopped), at
+ * DICTATION_SPEED times real time so the suite does not wait a minute for a
+ * minute of speech. Its "wrote" marker comes at the stop, with the final
+ * file's hashes.
  */
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
-type Mode = 'tone' | 'silence' | 'quiet-start' | 'short' | 'no-data' | 'exit-later' | 'exit-immediately';
+type Mode = 'tone' | 'silence' | 'quiet-start' | 'short' | 'no-data' | 'exit-later' | 'exit-immediately' | 'dictation';
 
 const SAMPLE_RATE = 16000;
 const CHUNK_MS = 100;
 /** Nothing in the suite records this long; a forgotten fake ends itself. */
 const MAX_LIFETIME_MS = 60_000;
+/** Audio seconds the dictation mode produces per second of wall-clock time. */
+const DICTATION_SPEED = 8;
+/** Where the dictation pauses for DICTATION_PAUSE_S, in audio seconds; elsewhere words are 0.15 s apart. */
+const DICTATION_PAUSES_S = [41, 63, 85, 107, 129, 151, 173, 195, 217, 239];
+const DICTATION_PAUSE_S = 1.2;
 
 const dir = process.env.CD_FAKE_DIR ?? '';
 const tool = process.env.CD_FAKE_TOOL ?? path.basename(process.argv[1] ?? 'fake');
@@ -76,10 +88,10 @@ function ambient(seconds: number, dbfs: number): Buffer {
   return pcm;
 }
 
-function wav(pcm: Buffer): Buffer {
+function wav(pcm: Buffer, declaredBytes = pcm.length): Buffer {
   const header = Buffer.alloc(44);
   header.write('RIFF', 0);
-  header.writeUInt32LE(36 + pcm.length, 4);
+  header.writeUInt32LE(36 + declaredBytes, 4);
   header.write('WAVE', 8);
   header.write('fmt ', 12);
   header.writeUInt32LE(16, 16);
@@ -90,8 +102,33 @@ function wav(pcm: Buffer): Buffer {
   header.writeUInt16LE(2, 32);
   header.writeUInt16LE(16, 34);
   header.write('data', 36);
-  header.writeUInt32LE(pcm.length, 40);
+  header.writeUInt32LE(declaredBytes, 40);
   return Buffer.concat([header, pcm]);
+}
+
+function sha1(data: Buffer): string {
+  return crypto.createHash('sha1').update(data).digest('hex');
+}
+
+/**
+ * 100 ms of a dictation: 0.3 s of device spin-up zeros, then 2.1 s "words"
+ * (a -20 dBFS tone) 0.15 s apart in room noise (-55 dBFS), with a 1.2 s pause
+ * at each of DICTATION_PAUSES_S.
+ */
+function dictationChunk(index: number): Buffer {
+  const seconds = CHUNK_MS / 1000;
+  const at = Math.round(index * seconds * 10) / 10;
+  if (at < 0.3) {
+    return tone(seconds, -Infinity);
+  }
+  const pause = DICTATION_PAUSES_S.find((p) => at >= p && at < p + DICTATION_PAUSE_S);
+  if (pause !== undefined) {
+    return ambient(seconds, -55);
+  }
+  // Words and their short gaps, counted from the end of the last long pause
+  const since = DICTATION_PAUSES_S.filter((p) => at >= p + DICTATION_PAUSE_S).pop();
+  const t = (at - (since === undefined ? 0.3 : since + DICTATION_PAUSE_S)) % 2.25;
+  return t >= 2.1 - 1e-9 ? ambient(seconds, -55) : tone(seconds, -20);
 }
 
 /** What the recording "contains" in file mode. */
@@ -158,21 +195,49 @@ function main(): void {
   });
   process.stdout.on('error', () => exit(0, 'stdout-closed'));
 
-  if (!raw && output) {
+  const streaming = mode === 'dictation' && !raw && Boolean(output);
+  if (!raw && output && !streaming) {
     const content = fileContent();
     fs.writeFileSync(output, content);
-    mark('wrote', { bytes: content.length, sha1: crypto.createHash('sha1').update(content).digest('hex') });
+    mark('wrote', { bytes: content.length, sha1: sha1(content) });
   }
+  const pcm: Buffer[] = [];
+  let fd: number | undefined;
+  if (streaming) {
+    fd = fs.openSync(output, 'w');
+    fs.writeSync(fd, wav(Buffer.alloc(0), 0)); // like libsndfile: no data declared until the file is closed
+  }
+  /** Fill in the sizes, as libsndfile does when parecord is stopped, and log what the file holds. */
+  const finalize = () => {
+    if (fd === undefined) {
+      return;
+    }
+    const data = Buffer.concat(pcm);
+    const header = wav(Buffer.alloc(0), data.length);
+    fs.writeSync(fd, header, 0, header.length, 0);
+    fs.closeSync(fd);
+    fd = undefined;
+    const content = Buffer.concat([header, data]);
+    mark('wrote', { bytes: content.length, sha1: sha1(content), pcmBytes: data.length, pcmSha1: sha1(data), audioMs: Math.round(data.length / 32) });
+  };
+  process.on('exit', finalize);
 
   const startedAt = Date.now();
   let chunks = 0;
   setInterval(() => {
-    if (raw) {
-      // Real time: write every chunk the clock says is due by now
-      const due = Math.floor((Date.now() - startedAt) / CHUNK_MS) + 1;
+    if (raw || streaming) {
+      // Write every chunk the clock says is due by now
+      const speed = mode === 'dictation' ? DICTATION_SPEED : 1;
+      const due = Math.floor(((Date.now() - startedAt) * speed) / CHUNK_MS) + 1;
       while (chunks < due) {
-        const chunk = streamChunk(chunks++);
-        if (chunk) {
+        const chunk = mode === 'dictation' ? dictationChunk(chunks++) : streamChunk(chunks++);
+        if (!chunk) {
+          continue;
+        }
+        if (streaming && fd !== undefined) {
+          fs.writeSync(fd, chunk);
+          pcm.push(chunk);
+        } else if (raw) {
           process.stdout.write(chunk);
         }
       }

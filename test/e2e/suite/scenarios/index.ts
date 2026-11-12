@@ -27,6 +27,7 @@ import {
   recorderTabCancel,
   recorderTabRepeatAndErrors,
 } from './recorderTab';
+import { liveTranscription } from './live';
 import { elevenLabsBalance } from './usage';
 
 /** Implementation of every unit in ../../catalog.ts, by unit id. */
@@ -44,6 +45,7 @@ export const IMPLEMENTATIONS: Record<string, Scenario> = {
   'hold-mode-press-release': holdModePressRelease,
   'recorder-exit-errors': recorderExitErrors,
   'hold-overlap-escape': holdOverlapEscape,
+  'live-transcription': liveTranscription,
   'escape-during-startup': escapeDuringStartup,
   'recorder-tab-first-recording:file-open': firstRecordingFileOpen,
   'recorder-tab-first-recording:empty-editor-area': firstRecordingEmptyEditorArea,

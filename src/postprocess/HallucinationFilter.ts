@@ -75,6 +75,41 @@ const HALLUCINATION_PATTERNS: RegExp[] = [
   /^редактор\s+суб/i,
 ];
 
+/**
+ * Stock phrases nobody dictates to a coding assistant on their own, unlike
+ * "thank you" or "bye", which the whole-text check above also drops.
+ */
+const NEVER_DICTATED = new Set([
+  'thanks for watching',
+  'thank you for watching',
+  'subscribe to my channel',
+  'please subscribe',
+  'like and subscribe',
+  'see you in the next video',
+  'vielen dank fürs zuschauen',
+  'danke fürs zuschauen',
+  'merci d\'avoir regardé',
+  'gracias por ver',
+  'dziękuję za oglądanie',
+  "i'm william hartsfield",
+]);
+
+/**
+ * Whether a piece of a dictation is something speech-to-text made up rather
+ * than heard: subtitle credits, a lone sound tag, a looping character, or a
+ * stock phrase nobody dictates. Unlike isHallucination it keeps "Thank you."
+ * and other short replies, which can end a long dictation.
+ */
+export function isUnambiguousHallucination(text: string): boolean {
+  const trimmed = text.trim();
+  const normalized = trimmed.toLowerCase().replace(/[.!?,;:…]+$/g, '');
+  if (!normalized) return false;
+  if (NEVER_DICTATED.has(normalized)) return true;
+  // A sound tag and nothing else: [music], (silence), (keyboard clicking)
+  if (/^(\[[^\]]*\]|\([^)]*\)|\s)+$/.test(trimmed)) return true;
+  return HALLUCINATION_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 export function isHallucination(text: string): boolean {
   const normalized = text.trim().toLowerCase().replace(/[.!?,;:…]+$/g, '');
   if (!normalized) return true;

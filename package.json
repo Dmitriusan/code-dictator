@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for Claude Code, Copilot, Cline, or any AI chat in VS Code — 90+ languages, powered by ElevenLabs. Press Alt+D, talk, paste.",
-  "version": "1.1.28",
+  "version": "1.1.29",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -437,6 +437,12 @@
             "minimum": 10,
             "maximum": 3600,
             "description": "Maximum recording duration in seconds"
+          },
+          "codeDictator.recording.transcribeWhileSpeaking": {
+            "order": 5,
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "Transcribe long dictations in parts while you are still speaking, so the text is ready a second or two after you stop instead of after the whole recording has been sent. From 40 seconds into a recording it is cut at pauses, the first part 40 to 65 seconds long and later ones 20 to 45, and each part goes to speech-to-text while you go on talking: the first about 50 seconds in (sooner after a pause of 2 seconds or more, about 55 with the language on auto-detect). A dictation that ends before that is sent whole when you stop, as with this off.\n\n*Costs more: neighbouring parts overlap by 5 seconds (2.5 s on each side of a cut), so that sentences come out whole at the joins, and that audio is billed twice: about 10 to 25% more for a long dictation. Parts already sent are billed even if you cancel the dictation with Escape.*"
           }
         }
       },

@@ -22,7 +22,7 @@ export type RecorderTool = (typeof RECORDER_TOOLS)[number];
 /** The completion chime's players, in SoundPlayer's order. Only the first is faked. */
 const PLAYERS = ['pw-play', 'paplay', 'aplay'] as const;
 
-export type FakeMode = 'tone' | 'silence' | 'quiet-start' | 'short' | 'no-data' | 'exit-immediately' | 'exit-later';
+export type FakeMode = 'tone' | 'silence' | 'quiet-start' | 'short' | 'no-data' | 'exit-immediately' | 'exit-later' | 'dictation';
 
 /** One line of the fake recorders' marker log. */
 export interface Marker {
@@ -35,6 +35,10 @@ export interface Marker {
   output?: string;
   bytes?: number;
   sha1?: string;
+  /** dictation mode: the samples alone, without the WAV header. */
+  pcmBytes?: number;
+  pcmSha1?: string;
+  audioMs?: number;
   signal?: string;
   code?: number;
   reason?: string;

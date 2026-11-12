@@ -60,4 +60,29 @@ describe('NativeRecorder.buildArgs', () => {
       expect(args).toEqual(['-d', '-r', '16000', '-c', '1', '-b', '16', TMP]);
     });
   });
+
+  describe('ffmpeg writes every packet as it comes', () => {
+    // Without -flush_packets 1, ffmpeg holds 256 KiB (8 s of 16 kHz mono 16-bit
+    // audio) before its first write: the recording could not be transcribed
+    // while it grows, and a killed recorder lost those 8 s.
+    it('flushes packets, before the output file, with the usual format (macOS and Linux)', () => {
+      if (process.platform === 'win32') {
+        return; // the Windows input probes the DirectShow device with a real ffmpeg
+      }
+      const args = NativeRecorder.buildArgs('ffmpeg', 'ffmpeg', false, TMP);
+      const input = process.platform === 'darwin' ? ['-f', 'avfoundation', '-i', ':default'] : ['-f', 'pulse', '-i', 'default'];
+      expect(args).toEqual([...input, '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le', '-flush_packets', '1', '-y', TMP]);
+    });
+
+    it('asks avfoundation (macOS) for the default microphone and no camera', () => {
+      const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      try {
+        const args = NativeRecorder.buildArgs('ffmpeg', 'ffmpeg', false, TMP);
+        expect(args.slice(0, 4)).toEqual(['-f', 'avfoundation', '-i', ':default']);
+      } finally {
+        Object.defineProperty(process, 'platform', platform);
+      }
+    });
+  });
 });

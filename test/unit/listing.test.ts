@@ -37,6 +37,14 @@ describe('the text users read before installing', () => {
     }
   });
 
+  it('leaves transcribing while speaking off unless asked for, and says it costs more', () => {
+    const properties = Object.fromEntries(manifest.contributes.configuration.flatMap((section: { properties: object }) => Object.entries(section.properties)));
+    const setting = properties['codeDictator.recording.transcribeWhileSpeaking'];
+
+    expect(setting.default).toBe(false);
+    expect(setting.markdownDescription).toMatch(/billed twice/);
+  });
+
   it('no longer offers audio isolation, which never had an effect, and marks its setting deprecated', () => {
     const properties = manifest.contributes.configuration.flatMap((section: { properties: object }) => Object.entries(section.properties));
     const isolation = Object.fromEntries(properties)['codeDictator.recording.audioIsolation'];

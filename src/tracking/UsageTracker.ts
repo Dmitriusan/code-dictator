@@ -4,10 +4,16 @@ import type { TranscriptionResult, HistoryEntry, UsageStats } from '../types';
 export class UsageTracker {
   constructor(private readonly storage: StorageService) {}
 
+  /**
+   * Record an inserted transcription: `durationMs` of recording in the
+   * history, and `transcribedMs` of it in the usage stats (less when stretches
+   * of silence in it were never sent).
+   */
   async record(
     result: TranscriptionResult,
     provider: string,
     durationMs: number,
+    transcribedMs = durationMs,
   ): Promise<void> {
     const estimatedCost = result.cost ?? 0;
 
@@ -25,7 +31,7 @@ export class UsageTracker {
     await this.storage.addToHistory(entry);
 
     // Update usage stats
-    await this.storage.recordUsage(durationMs, estimatedCost);
+    await this.storage.recordUsage(transcribedMs, estimatedCost);
   }
 
   getStats(): UsageStats {

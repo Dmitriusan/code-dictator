@@ -43,6 +43,11 @@ export class NativeRecorder {
     return this._isRecording;
   }
 
+  /** The WAV file the recording is being written to, while it records. */
+  get outputFile(): string | null {
+    return this._isRecording ? this.tempFile : null;
+  }
+
   /** True once at least one audio chunk has been received from the recorder process. */
   hasReceivedAudio(): boolean {
     return this.totalBytesReceived > 0;
@@ -140,12 +145,20 @@ export class NativeRecorder {
       // ffmpeg: uses DirectShow on Windows, default device on macOS/Linux.
       // Writes WAV to file (no stdout pipe — ffmpeg writes headers at end);
       // it flushes on graceful 'q' shutdown, so it doesn't need a latency cap.
+      // -flush_packets 1: without it ffmpeg holds 256 KiB (8 s of audio) before
+      // its first write, so the file could not be transcribed while it grows,
+      // and a recording killed before that buffer was flushed lost those 8 s.
+      // avfoundation reads its input as "<video>:<audio>": ":default" is the
+      // default microphone and no camera, where "default" alone is the camera.
       const inputArgs = process.platform === 'win32'
         ? ['-f', 'dshow', '-i', `audio=${detectWindowsAudioDevice(command)}`]
-        : ['-f', process.platform === 'darwin' ? 'avfoundation' : 'pulse', '-i', 'default'];
+        : process.platform === 'darwin'
+          ? ['-f', 'avfoundation', '-i', ':default']
+          : ['-f', 'pulse', '-i', 'default'];
       return [
         ...inputArgs,
         '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le',
+        '-flush_packets', '1',
         '-y', tempFile,
       ];
     }

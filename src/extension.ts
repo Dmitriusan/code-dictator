@@ -4,7 +4,7 @@ import * as path from 'path';
 import { StorageService } from './storage/StorageService';
 import { FailedRecordings, type FailedRecording } from './storage/FailedRecordings';
 import { StatusBar } from './ui/StatusBar';
-import { RecorderManager } from './recorder/RecorderManager';
+import { RecorderManager, type RecordedAudio } from './recorder/RecorderManager';
 import type { AudioDiagnostics } from './recorder/NativeRecorder';
 import { NoRecorderError } from './recorder/NoRecorderError';
 import { isAudioSilent } from './recorder/AudioAnalysis';
@@ -25,7 +25,8 @@ import { HoldModeController } from './recorder/HoldModeController';
 import { configureDiagnosticLog, diagLog, disposeDiagnosticLog } from './DiagnosticLog';
 import { playCompletionChime } from './ui/SoundPlayer';
 import { isHallucination, isSuspiciouslyShort } from './postprocess/HallucinationFilter';
-import type { AudioDataPayload, ProviderType, TranscriptionResult } from './types';
+import { LiveTranscription } from './transcription/LiveTranscription';
+import type { AudioDataPayload, CodeDictatorSettings, ProviderType, TranscriptionResult } from './types';
 
 let storageService: StorageService;
 let failedRecordings: FailedRecordings;
@@ -35,6 +36,8 @@ let usageTracker: UsageTracker;
 let elevenLabsBalance: ElevenLabsBalance;
 /** Reads the ElevenLabs balance again once a transcription's charge has had time to show. */
 let balanceCheckTimer: ReturnType<typeof setTimeout> | undefined;
+/** When the pending balance reading is due (Date.now() milliseconds). */
+let balanceCheckAt = 0;
 let historyManager: HistoryManager;
 let textInjector: TextInjector;
 let holdController: HoldModeController;
@@ -57,8 +60,19 @@ const pipelineAborts = new Set<AbortController>();
 
 /** ElevenLabs may post a transcription's charge a moment after answering. */
 const BALANCE_CHECK_DELAY_MS = 2000;
+/** After a dictation transcribed in parts: its last part came back only just before, and its charge may show later. */
+const LIVE_BALANCE_DELAY_MS = 15_000;
 /** A window coming to the front reads a balance older than this again. */
 const BALANCE_MAX_AGE_MS = 10 * 60_000;
+/**
+ * With the language auto-detected, a part of a dictation transcribed while
+ * speaking waits until this much speech follows it, so the last part is never
+ * shorter: clips under 10 s (about 6 s of speech) often come back in a related
+ * language (Ukrainian as Russian), longer ones practically never.
+ */
+const LIVE_HOLD_SPEECH_SECONDS = 6;
+/** Changes of each API key ("codeDictator.<provider>.apiKey"), so that a dictation's parts are never sent with two keys. */
+const apiKeyChanges = new Map<string, number>();
 
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize services
@@ -70,6 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
   failedRecordings = new FailedRecordings(path.join(context.globalStorageUri.fsPath, 'failed-recordings'));
   statusBar = new StatusBar();
   recorder = new RecorderManager(context.extensionUri);
+  recorder.setLiveTranscription(startLiveTranscription);
   usageTracker = new UsageTracker(storageService);
   elevenLabsBalance = new ElevenLabsBalance(context.globalState, () => storageService.getApiKey('elevenlabs'));
   historyManager = new HistoryManager(storageService);
@@ -319,6 +334,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // A new ElevenLabs key (from the setup wizard, in any window) may belong to another account
   context.subscriptions.push(
     context.secrets.onDidChange((e) => {
+      apiKeyChanges.set(e.key, (apiKeyChanges.get(e.key) ?? 0) + 1);
       if (e.key === 'codeDictator.elevenlabs.apiKey') {
         checkBalance();
       }
@@ -374,7 +390,7 @@ async function handleStartRecording(): Promise<void> {
   }
 
   try {
-    diagLog('Extension', `Starting recording: provider=${settings.provider}, isolation=${settings.audioIsolation}, maxDuration=${settings.maxRecordingDuration}s`);
+    diagLog('Extension', `Starting recording: provider=${settings.provider}, isolation=${settings.audioIsolation}, maxDuration=${settings.maxRecordingDuration}s, transcribeWhileSpeaking=${settings.transcribeWhileSpeaking}`);
     // Show initializing state immediately so the user gets visual feedback
     // while the webview/native recorder spins up (getUserMedia, etc.)
     statusBar.updateState('initializing');
@@ -414,7 +430,65 @@ function showNoRecorder(error: NoRecorderError): void {
 }
 
 async function handleStopAndTranscribe(): Promise<void> {
-  await transcribeRecording(() => recorder.stopRecording());
+  await transcribeRecording((signal) => recorder.stopRecording(signal));
+}
+
+/**
+ * Follow a native recording as it is written and transcribe its parts while
+ * the user still speaks (codeDictator.recording.transcribeWhileSpeaking). The
+ * parts are sent with the same settings a whole recording would be.
+ */
+function startLiveTranscription(file: string): LiveTranscription | undefined {
+  const settings = storageService.getSettings();
+  if (!settings.transcribeWhileSpeaking) {
+    return undefined;
+  }
+  const provider = createProvider(settings, (p) => storageService.getApiKey(p));
+  const language = settings.language || undefined;
+  const sentWith = liveSettingsKey(settings);
+  return LiveTranscription.start(file, {
+    transcribe: async (wav, signal, prompt) => {
+      try {
+        return await provider.transcribe(wav, {
+          language,
+          prompt,
+          mimeType: 'audio/wav',
+          signal,
+          onRetry: (reason, delayMs) => diagLog('Live', `${reason} Retrying in ${delayMs / 1000}s`),
+        });
+      } catch (error) {
+        if (provider.id === 'elevenlabs' && !signal.aborted) {
+          checkBalanceSoon(); // the error may be that the credits ran out
+        }
+        throw error;
+      }
+    },
+    // The same vocabulary hint as a whole recording gets; ElevenLabs takes no prompt
+    ...(provider.id === 'elevenlabs' ? {} : { prompt: buildWhisperPrompt() }),
+    holdSpeechSeconds: language ? 0 : LIVE_HOLD_SPEECH_SECONDS,
+    invalidated: () => (liveSettingsKey(storageService.getSettings()) === sentWith ? undefined : 'the speech-to-text settings or API key changed'),
+    onTranscribed: (seconds) => {
+      if (provider.id === 'elevenlabs') {
+        // Charged whatever becomes of the dictation. The meter counts the recording each part covered,
+        // so that its credits a minute, overlaps included, turn the balance into minutes of dictation
+        elevenLabsBalance.noteTranscribed(seconds).catch(() => { /* best-effort */ });
+      }
+    },
+    onDiscarded: (billed) => {
+      // Billed although none of it is inserted: the recording it covered and its cost count, not a transcription
+      storageService.recordUsage(billed.recordingSeconds * 1000, billed.cost, false).then(showUsageIndicator, () => { /* best-effort */ });
+      if (provider.id === 'elevenlabs') {
+        checkBalanceSoon();
+      }
+    },
+    log: (message) => diagLog('Live', message),
+  });
+}
+
+/** What a request depends on: parts sent with other settings, or another key, than those at the stop are not used. */
+function liveSettingsKey(settings: CodeDictatorSettings): string {
+  const keyChanges = apiKeyChanges.get(`codeDictator.${settings.provider}.apiKey`) ?? 0;
+  return JSON.stringify([settings.provider, settings.voiceModel, settings.customApiUrl, settings.language, keyChanges]);
 }
 
 /** Abort every transcription/cleanup pipeline in flight. */
@@ -435,7 +509,7 @@ function cancelPipelines(): void {
  * set when the audio is a recording kept by an earlier failed attempt.
  */
 async function transcribeRecording(
-  getAudio: () => Promise<AudioDataPayload>,
+  getAudio: (signal: AbortSignal) => Promise<RecordedAudio>,
   retrying?: FailedRecording,
 ): Promise<void> {
   const settings = storageService.getSettings();
@@ -443,6 +517,10 @@ async function transcribeRecording(
   // Create an AbortController so the user can cancel transcription/cleanup via Escape
   const abort = new AbortController();
   pipelineAborts.add(abort);
+  // What transcribed the recording while it was recorded, if anything did
+  let live: LiveTranscription | undefined;
+  // Audio transcribed (and so billed) that is not in the usage stats yet
+  let unrecorded: { durationMs: number; cost: number } | undefined;
 
   try {
     // Get the audio: stop the recording, or load the saved one being retried
@@ -450,8 +528,9 @@ async function transcribeRecording(
     vscode.commands.executeCommand('setContext', 'codeDictator.isRecording', false);
     vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', true);
 
-    const audioPayload = await getAudio();
-    diagLog('Extension', `${retrying ? 'Retrying saved recording' : 'Recording stopped'}: ${Math.round(audioPayload.durationMs / 1000)}s, ${audioPayload.buffer.length} bytes, mime=${audioPayload.mimeType}`);
+    const audioPayload = await getAudio(abort.signal);
+    live = audioPayload.live;
+    diagLog('Extension', `${retrying ? 'Retrying saved recording' : 'Recording stopped'}: ${Math.round(audioPayload.durationMs / 1000)}s, ${audioPayload.buffer.length} bytes, mime=${audioPayload.mimeType}${live ? `, ${live.segmentCount} part(s) cut while recording` : ''}`);
 
     // Guard against empty/too-short recordings (e.g. stale timer, device disconnect)
     const MIN_AUDIO_BYTES = 1000; // ~30ms of 16kHz 16-bit mono
@@ -477,18 +556,26 @@ async function transcribeRecording(
     // Build Whisper prompt hint to reduce hallucinations.
     const whisperPrompt = buildWhisperPrompt();
 
-    // Transcribe
+    // Transcribe: what is left of a recording transcribed while it was recorded, or all of it
     const provider = createProvider(settings, (p) => storageService.getApiKey(p));
-    diagLog('STT', `Calling ${provider.name} (${provider.id}), language: ${settings.language || 'auto'}, mimeType: ${audioPayload.mimeType}, audioSize: ${audioPayload.buffer.length} bytes${whisperPrompt ? ', prompt hint: yes' : ''}`);
-    let result: TranscriptionResult;
+    let result: TranscriptionResult | undefined;
+    let transcribedLive = false;
     try {
-      result = await provider.transcribe(audioPayload.buffer, {
-        language: settings.language || undefined,
-        prompt: whisperPrompt,
-        mimeType: audioPayload.mimeType,
-        signal: abort.signal,
-        onRetry: (reason, delayMs) => diagLog('STT', `${reason} Retrying in ${delayMs / 1000}s`),
-      });
+      if (live) {
+        // Undefined when the whole recording has to be sent after all; throws when its rest failed
+        result = await live.finish(audioPayload, abort.signal);
+        transcribedLive = result !== undefined;
+      }
+      if (!result) {
+        diagLog('STT', `Calling ${provider.name} (${provider.id}), language: ${settings.language || 'auto'}, mimeType: ${audioPayload.mimeType}, audioSize: ${audioPayload.buffer.length} bytes${whisperPrompt ? ', prompt hint: yes' : ''}`);
+        result = await provider.transcribe(audioPayload.buffer, {
+          language: settings.language || undefined,
+          prompt: whisperPrompt,
+          mimeType: audioPayload.mimeType,
+          signal: abort.signal,
+          onRetry: (reason, delayMs) => diagLog('STT', `${reason} Retrying in ${delayMs / 1000}s`),
+        });
+      }
     } catch (error) {
       statusBar.updateState('idle');
       if (provider.id === 'elevenlabs') {
@@ -503,10 +590,18 @@ async function transcribeRecording(
       showTranscriptionFailed(message, retrying ?? await keepFailedRecording(audioPayload));
       return;
     }
-    diagLog('STT', `Result: "${result.text}", language=${result.language ?? 'n/a'}, duration=${result.duration ?? 'n/a'}s, cost=${result.cost ?? 'n/a'}`);
+    diagLog('STT', `Result${transcribedLive ? ' (transcribed while recording)' : ''}: "${result.text}", language=${result.language ?? 'n/a'}, duration=${result.duration ?? 'n/a'}s, cost=${result.cost ?? 'n/a'}`);
+    const transcribedMs = transcribedLive && result.duration !== undefined ? result.duration * 1000 : audioPayload.durationMs;
+    unrecorded = { durationMs: transcribedMs, cost: result.cost ?? 0 };
     if (provider.id === 'elevenlabs') {
-      // Charged even when no speech comes back or the dictation is cancelled from here on
-      noteElevenLabsAudio(audioPayload.durationMs);
+      // Charged even when no speech comes back or the dictation is cancelled from here on.
+      // The parts of a live transcription were counted as each was transcribed; the charge for
+      // its last one, which came back just now, is given time to show
+      if (transcribedLive) {
+        checkBalanceSoon(LIVE_BALANCE_DELAY_MS);
+      } else {
+        noteElevenLabsAudio(audioPayload.durationMs);
+      }
     }
 
     if (!result.text.trim() || isHallucination(result.text)) {
@@ -585,8 +680,10 @@ async function transcribeRecording(
       settings.autoCopyToClipboard,
     );
 
-    // Track usage
-    await usageTracker.record(result, provider.id, audioPayload.durationMs);
+    // Track usage: the recording transcribed (for a live transcription the stretches its parts covered,
+    // the ElevenLabs meter's seconds too), at the cost of every request, overlaps included
+    unrecorded = undefined;
+    await usageTracker.record(result, provider.id, audioPayload.durationMs, transcribedMs);
     if (retrying) {
       await failedRecordings.remove(retrying);
     }
@@ -616,6 +713,12 @@ async function transcribeRecording(
       vscode.window.showErrorMessage(`Code Dictator: ${message}`);
     }
   } finally {
+    if (unrecorded) {
+      // Billed, though nothing was inserted (no speech, or Escape during cleanup): audio and cost count, not a transcription
+      storageService.recordUsage(unrecorded.durationMs, unrecorded.cost, false).then(showUsageIndicator, () => { /* best-effort */ });
+    }
+    // Nothing more is sent for this recording, whichever way the pipeline ended
+    live?.cancel();
     pipelineAborts.delete(abort);
     // A pipeline still running (hold mode) keeps Escape bound, so it can be cancelled too
     if (pipelineAborts.size === 0) {
@@ -884,9 +987,18 @@ function checkBalance(): void {
   });
 }
 
-function checkBalanceSoon(): void {
+/** Read the balance in `delayMs`, or later if a later reading is already due: one that waits for a charge is never moved earlier. */
+function checkBalanceSoon(delayMs = BALANCE_CHECK_DELAY_MS): void {
+  const at = Date.now() + delayMs;
+  if (balanceCheckTimer !== undefined && balanceCheckAt > at) {
+    return;
+  }
   clearTimeout(balanceCheckTimer);
-  balanceCheckTimer = setTimeout(checkBalance, BALANCE_CHECK_DELAY_MS);
+  balanceCheckAt = at;
+  balanceCheckTimer = setTimeout(() => {
+    balanceCheckTimer = undefined;
+    checkBalance();
+  }, delayMs);
 }
 
 /** Count audio ElevenLabs transcribed, so the credits it cost can be measured, and read the balance soon. */
@@ -896,6 +1008,7 @@ function noteElevenLabsAudio(durationMs: number): void {
 }
 
 export function deactivate(): void {
+  cancelPipelines();
   clearTimeout(balanceCheckTimer);
   disposeDiagnosticLog();
 }

@@ -11,6 +11,7 @@ vi.mock('vscode', () => import('./__mocks__/vscode').then((m) => m.default));
 
 vi.mock('../../src/recorder/RecorderManager', () => ({
   RecorderManager: class {
+    setLiveTranscription() { /* no-op */ }
     get isRecording() { return false; }
     startRecording() { return mocks.startRecording(); }
     stopRecording() { return Promise.reject(new Error('not recording')); }

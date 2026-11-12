@@ -112,7 +112,7 @@ describe('costView()', () => {
     expect(view?.level).toBeUndefined();
     expect(view?.tooltip).toContain('**Speech-to-text cost today: about $0.06**');
     expect(view?.tooltip).toContain('14 transcriptions · 12m 30s of audio');
-    expect(view?.tooltip).toContain("Code Dictator's estimate from the length of today's recordings and OpenAI's price for transcription. It is not read from your account, and AI cleanup is not included.");
+    expect(view?.tooltip).toContain("Code Dictator's estimate from the audio sent today and OpenAI's price for transcription. It is not read from your account, and AI cleanup is not included.");
   });
 
   it('says that a custom endpoint has no price', () => {
@@ -129,7 +129,7 @@ describe('costView()', () => {
       { kind: 'missing-permission' });
 
     expect(view?.text).toBe('$(credit-card) $0.0012');
-    expect(view?.tooltip).toContain("today's recordings and ElevenLabs' price for transcription");
+    expect(view?.tooltip).toContain("the audio sent today and ElevenLabs' price for transcription");
     expect(view?.tooltip).toContain('**Your ElevenLabs credits can show here instead.**');
     expect(view?.tooltip).toContain('[elevenlabs.io](https://elevenlabs.io/app/settings/api-keys), edit the key and set **User** to **Read**');
   });
