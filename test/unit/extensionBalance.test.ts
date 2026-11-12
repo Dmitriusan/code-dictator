@@ -144,8 +144,8 @@ describe('the status bar usage item', () => {
 
     await activate();
 
-    // 96,412 credits at ElevenLabs' price, 21 credits a minute: 76 hours
-    await vi.waitFor(() => expect(usageItem().text).toBe('$(credit-card) 96.4K · ~76h'));
+    // 96,412 credits at ElevenLabs' price, 18 credits a minute: 89 hours
+    await vi.waitFor(() => expect(usageItem().text).toBe('$(credit-card) 96.4K · ~89h'));
     expect(balanceRequests()).toHaveLength(1);
     expect(fetchMock.mock.calls[0][1].headers).toEqual({ 'xi-api-key': 'xi-test-key-1234' });
     expect(tooltip()).toContain('**ElevenLabs credits left: 96,412** of 121,000');
@@ -155,7 +155,7 @@ describe('the status bar usage item', () => {
   it('reads the balance again after a dictation, and learns what dictation costs', async () => {
     answer(200, subscription(24_588));
     await activate();
-    await vi.waitFor(() => expect(usageItem().text).toBe('$(credit-card) 96.4K · ~76h'));
+    await vi.waitFor(() => expect(usageItem().text).toBe('$(credit-card) 96.4K · ~89h'));
 
     answer(200, subscription(24_608)); // 20 credits for the minute
     await dictate();
@@ -163,8 +163,8 @@ describe('the status bar usage item', () => {
     await vi.advanceTimersByTimeAsync(2000);
 
     await vi.waitFor(() => expect(balanceRequests()).toHaveLength(2));
-    // 96,392 credits at (60 × 20 + 30 × 21) / 90 = 20.3 credits a minute: 79 hours
-    await vi.waitFor(() => expect(usageItem().text).toBe('$(credit-card) 96.4K · ~79h'));
+    // 96,392 credits at (60 × 20 + 30 × 18) / 90 = 19.3 credits a minute: 83 hours
+    await vi.waitFor(() => expect(usageItem().text).toBe('$(credit-card) 96.4K · ~83h'));
     expect(tooltip()).toContain('what your dictation has cost so far');
   });
 
@@ -220,7 +220,7 @@ describe('the status bar usage item', () => {
     answer(200, subscription(30_000));
     vi.setSystemTime(Date.now() + 11 * 60_000);
     onFocus({ focused: true });
-    await vi.waitFor(() => expect(usageItem().text).toBe('$(credit-card) 91K · ~72h'));
+    await vi.waitFor(() => expect(usageItem().text).toBe('$(credit-card) 91K · ~84h'));
 
     onSecret({ key: 'codeDictator.openai.apiKey' });
     expect(balanceRequests()).toHaveLength(2);
@@ -249,6 +249,6 @@ describe('the status bar usage item', () => {
     await vi.waitFor(() => expect(picked).toHaveLength(2));
     expect(picked[0]).toContain('$(credit-card) 96,412 credits left');
     expect(picked[1]).toContain('$(credit-card) 96,000 credits left');
-    expect(usageItem().text).toBe('$(credit-card) 96K · ~76h');
+    expect(usageItem().text).toBe('$(credit-card) 96K · ~88h');
   });
 });

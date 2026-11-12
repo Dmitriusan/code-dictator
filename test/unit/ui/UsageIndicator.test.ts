@@ -16,7 +16,7 @@ function creator(used: number, extra: Partial<Balance> = {}): Balance {
   return { used, limit: 121_000, tier: 'creator', status: 'active', renewsAt: NOW + 26 * DAY, checkedAt: NOW - 2 * 60_000, ...extra };
 }
 
-const PRICE = { creditsPerMinute: 21, measuredSeconds: 0 };
+const PRICE = { creditsPerMinute: 18, measuredSeconds: 0 };
 /** How the tooltip writes the time the balance was read, in the local time zone. */
 const at = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const MEASURED = { creditsPerMinute: 20.2, measuredSeconds: 2040 };
@@ -58,13 +58,15 @@ describe('balanceView()', () => {
   it("says when the time comes from ElevenLabs' price rather than measured dictation", () => {
     const { tooltip } = balanceView(creator(24_588), PRICE, undefined, NOW);
 
-    expect(tooltip).toContain("at about 21 credits a minute, ElevenLabs' API price for Scribe v2 on your plan");
+    expect(tooltip).toContain("at about 18 credits a minute, roughly ElevenLabs' API price for Scribe v2 on paid plans");
+    expect(balanceView(creator(0, { tier: 'free', status: 'free', limit: 10_000 }), { creditsPerMinute: 37, measuredSeconds: 0 }, undefined, NOW).tooltip)
+      .toContain("at about 37 credits a minute, ElevenLabs' API price for Scribe v2 on the Free plan");
   });
 
   it('turns yellow with less than half an hour of dictation left', () => {
-    const view = balanceView(creator(120_400), PRICE, undefined, NOW); // 600 credits: 28 minutes
+    const view = balanceView(creator(120_500), PRICE, undefined, NOW); // 500 credits: 27 minutes
 
-    expect(view.text).toBe('$(credit-card) 600 · ~28m');
+    expect(view.text).toBe('$(credit-card) 500 · ~27m');
     expect(view.level).toBe('warning');
   });
 

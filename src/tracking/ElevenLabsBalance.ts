@@ -8,13 +8,15 @@ const METER_KEY = 'codeDictator.elevenlabs.creditMeter';
 
 /**
  * Credits a minute of Scribe v2 costs through the API, until Code Dictator has
- * measured it. The API price is $0.22 an hour on every plan, paid in credits at
- * the plan's rate: the Free plan's 10,000 credits buy 4.5 hours (37 a minute),
- * paid plans' credits buy 18.5 (Starter) to 22.2 (Pro and up) credits a minute
- * (elevenlabs.io/pricing/api, November 2026).
+ * measured it. The API price is $0.20 an hour on every plan, paid in credits at
+ * the plan's rate: the Free plan's 10,000 credits buy 4.5 hours (37 a minute);
+ * paid plans' credits buy 30 hours on Starter (30,000 credits: 16.7 a minute)
+ * to 495 on Pro (600,000: 20.2 a minute), and Creator's 121,000 buy 110 hours
+ * (18.3 a minute) (elevenlabs.io/pricing/api, 12 November 2026). Measured on
+ * Starter: 16.2 to 17.3 credits a minute.
  */
 const FREE_PLAN_CREDITS_PER_MINUTE = 37;
-const PAID_PLAN_CREDITS_PER_MINUTE = 21;
+const PAID_PLAN_CREDITS_PER_MINUTE = 18;
 /** Seconds of dictation the plan's price counts for, against what was measured. */
 const PRICE_WEIGHT_SECONDS = 30;
 /**

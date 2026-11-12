@@ -92,7 +92,7 @@ Code Dictator is **free and open-source**. You only pay for the speech-to-text A
 
 | Provider | Cost |
 |---|---|
-| ElevenLabs | **Free tier** (4.5 hrs/month), then $0.22/hr |
+| ElevenLabs | **Free tier** (4.5 hrs/month), then $0.20/hr |
 | OpenAI | See [OpenAI pricing](https://openai.com/api/pricing/) |
 | Custom / Local | Free |
 

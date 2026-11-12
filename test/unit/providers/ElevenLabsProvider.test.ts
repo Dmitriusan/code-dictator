@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ElevenLabsProvider } from '../../../src/providers/ElevenLabsProvider';
+import { buildWav } from '../../../src/recorder/Wav';
 
 describe('ElevenLabsProvider', () => {
   const originalFetch = globalThis.fetch;
@@ -13,8 +14,8 @@ describe('ElevenLabsProvider', () => {
     it('estimates cost for 60 seconds correctly', () => {
       const provider = new ElevenLabsProvider(async () => 'test-key');
       const cost = provider.estimateCost(60000);
-      // A minute at $0.22/hour
-      expect(cost).toBeCloseTo(0.22 / 60, 6);
+      // A minute at $0.20/hour
+      expect(cost).toBeCloseTo(0.20 / 60, 6);
     });
 
     it('estimates cost for 0 duration', () => {
@@ -25,13 +26,13 @@ describe('ElevenLabsProvider', () => {
     it('estimates cost for 1 hour', () => {
       const provider = new ElevenLabsProvider(async () => 'test-key');
       const cost = provider.estimateCost(3600000);
-      expect(cost).toBeCloseTo(0.22, 6);
+      expect(cost).toBeCloseTo(0.20, 6);
     });
 
     it('estimates cost for 1 second', () => {
       const provider = new ElevenLabsProvider(async () => 'test-key');
       const cost = provider.estimateCost(1000);
-      expect(cost).toBeCloseTo(0.22 / 3600, 9);
+      expect(cost).toBeCloseTo(0.20 / 3600, 9);
     });
   });
 
@@ -430,6 +431,19 @@ describe('ElevenLabsProvider', () => {
       // A word without its timing could not be placed, and would be lost: then no words at all
       globalThis.fetch = answer([{ text: 'Hi', start: null, end: null, type: 'word' }, { text: '(laughs)', start: 0.5, end: 1.1, type: 'audio_event' }]);
       expect((await provider.transcribe(Buffer.from('audio'), {})).words).toBeUndefined();
+    });
+
+    it('estimates the cost of a recording from its length, as ElevenLabs bills every second sent', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ text: 'hello', words: [{ text: 'hello', start: 0.4, end: 2.2, type: 'word' }] }),
+      });
+      const wav = buildWav({ channels: 1, sampleRate: 16000, bitsPerSample: 16, blockAlign: 2 }, Buffer.alloc(3 * 32000));
+
+      const result = await new ElevenLabsProvider(async () => 'test-api-key-12345').transcribe(wav, { mimeType: 'audio/wav' });
+
+      expect(result.duration).toBe(3);
+      expect(result.cost).toBeCloseTo(3 * 0.20 / 3600, 9);
     });
 
     it('calculates duration from word timestamps', async () => {

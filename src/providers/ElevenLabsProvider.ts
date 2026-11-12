@@ -1,7 +1,8 @@
 import type { STTProvider, TranscribedWord, TranscribeOptions, TranscriptionResult } from '../types';
+import { isPcm16, parseWavLayout, wavDataEnd } from '../recorder/Wav';
 
 const ENDPOINT = 'https://api.elevenlabs.io/v1/speech-to-text';
-const COST_PER_SECOND = 0.22 / 3600; // Scribe v2 through the API: $0.22/hour on every plan
+const COST_PER_SECOND = 0.20 / 3600; // Scribe v2 through the API: $0.20/hour on every plan (elevenlabs.io/pricing/api, 12 November 2026)
 
 const DEFAULT_MODEL = 'scribe_v2';
 
@@ -69,6 +70,12 @@ function timedWords(words: unknown): TranscribedWord[] | undefined {
     }
   }
   return timed;
+}
+
+/** Seconds of audio in a 16-bit PCM WAV, as the recorders write it; undefined for anything else. */
+function wavSeconds(audio: Buffer): number | undefined {
+  const layout = parseWavLayout(audio);
+  return layout && isPcm16(layout) ? (wavDataEnd(layout, audio.length) - layout.dataStart) / (layout.sampleRate * layout.blockAlign) : undefined;
 }
 
 /** Resolve after `ms`, or reject right away if the request is cancelled meanwhile. */
@@ -190,15 +197,11 @@ export class ElevenLabsProvider implements STTProvider {
       throw new Error('ElevenLabs returned an unexpected response format');
     }
 
-    // Estimate duration from word timestamps if available
-    let duration: number | undefined;
-    if (data.words && data.words.length > 0) {
-      const lastWord = data.words[data.words.length - 1];
-      duration = lastWord.end;
-    }
-
-    const durationSec = duration ?? (audio.length / 16000); // rough fallback
-    const cost = durationSec * COST_PER_SECOND;
+    // ElevenLabs bills every second of audio sent, the silence after the last word included: a WAV's
+    // length is known exactly; for other formats the last word's end, or else a rough guess from the size
+    const lastWordEnd = data.words && data.words.length > 0 ? data.words[data.words.length - 1].end : undefined;
+    const duration = wavSeconds(audio) ?? lastWordEnd;
+    const cost = (duration ?? audio.length / 16000) * COST_PER_SECOND;
 
     const code = data.language_code?.toLowerCase();
 

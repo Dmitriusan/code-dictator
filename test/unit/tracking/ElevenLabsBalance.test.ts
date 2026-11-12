@@ -219,10 +219,10 @@ describe('ElevenLabsBalance', () => {
       await balance.refresh();
     };
 
-    it("starts from ElevenLabs' API price on a paid plan: 21 credits a minute", async () => {
+    it("starts from ElevenLabs' API price on a paid plan: 18 credits a minute", async () => {
       await readAt(1000);
 
-      expect(balance.rate()).toEqual({ creditsPerMinute: 21, measuredSeconds: 0 });
+      expect(balance.rate()).toEqual({ creditsPerMinute: 18, measuredSeconds: 0 });
     });
 
     it('starts from 37 credits a minute on the Free plan, whose credits buy fewer hours', async () => {
@@ -240,7 +240,7 @@ describe('ElevenLabsBalance', () => {
       expect(balance.rate().measuredSeconds).toBe(0);
       await readAt(1030); // and now the rest's 10
       expect(balance.rate().measuredSeconds).toBe(90);
-      expect(balance.rate().creditsPerMinute).toBeCloseTo((30 * 60 + 21 * 30) / 120, 6);
+      expect(balance.rate().creditsPerMinute).toBeCloseTo((30 * 60 + 18 * 30) / 120, 6);
     });
 
     it('waits only once: a charge still short at the next reading is measured as it shows', async () => {
@@ -250,7 +250,7 @@ describe('ElevenLabsBalance', () => {
       await readAt(1020);
 
       expect(balance.rate().measuredSeconds).toBe(90);
-      expect(balance.rate().creditsPerMinute).toBeCloseTo((20 * 60 + 21 * 30) / 120, 6);
+      expect(balance.rate().creditsPerMinute).toBeCloseTo((20 * 60 + 18 * 30) / 120, 6);
     });
 
     it('moves to what the dictation was charged', async () => {
@@ -261,7 +261,7 @@ describe('ElevenLabsBalance', () => {
       const rate = balance.rate();
       expect(rate.measuredSeconds).toBe(60);
       // One measured minute at 20 against half a minute at the price
-      expect(rate.creditsPerMinute).toBeCloseTo((20 * 60 + 21 * 30) / 90, 6);
+      expect(rate.creditsPerMinute).toBeCloseTo((20 * 60 + 18 * 30) / 90, 6);
 
       for (let used = 1020; used < 1020 + 20 * 60; used += 20) {
         await balance.noteTranscribed(60);
@@ -315,7 +315,7 @@ describe('ElevenLabsBalance', () => {
 
       await readAt(1020, { tier: 'pro', character_limit: 600_000 });
 
-      expect(balance.rate()).toEqual({ creditsPerMinute: 21, measuredSeconds: 0 });
+      expect(balance.rate()).toEqual({ creditsPerMinute: 18, measuredSeconds: 0 });
     });
 
     it('lets old measurements fade, so a new price shows', async () => {

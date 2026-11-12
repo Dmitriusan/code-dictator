@@ -47,8 +47,8 @@ export const elevenLabsBalance: Scenario = async ({ h, expect, observe }) => {
   h.ui.responders = {};
   const t1 = clock();
 
-  // 96,412 credits at ElevenLabs' price of 21 credits a minute: 76 hours
-  await waitFor('the balance in the status bar', () => usage.visible && usage.item.text === '$(credit-card) 96.4K · ~76h', 5000)
+  // 96,412 credits at ElevenLabs' price of 18 credits a minute: 89 hours
+  await waitFor('the balance in the status bar', () => usage.visible && usage.item.text === '$(credit-card) 96.4K · ~89h', 5000)
     .catch(() => expect(false, `usage item ${show({ text: usage.item.text, visible: usage.visible, reads: reads().length })}`));
   const [first] = reads();
   expect(first?.path === '/__el/v1/user/subscription' && first.headers['xi-api-key'] === E2E_KEY,
@@ -65,7 +65,7 @@ export const elevenLabsBalance: Scenario = async ({ h, expect, observe }) => {
   await waitFor('the balance to be read again', () => reads().length >= 2, 6000)
     .catch(() => expect(false, `${reads().length} balance requests after the dictation`));
   // 91,000 credits; 5,412 credits for a short dictation is not what dictation costs, so the price still applies
-  await waitFor('the new balance', () => usage.item.text === '$(credit-card) 91K · ~72h', 3000)
+  await waitFor('the new balance', () => usage.item.text === '$(credit-card) 91K · ~84h', 3000)
     .catch(() => expect(false, `usage item after the dictation ${show(usage.item.text)}`));
 
   expect(h.ui.notifications(t1).length === 0, `notifications ${show(notes(h.ui.notifications(t1)))}`);

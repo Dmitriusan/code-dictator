@@ -41,7 +41,7 @@ export function balanceView(balance: Balance, rate: CreditRate, problem: Balance
     lines.push(`ElevenLabs turns transcriptions away until your credits renew${renewal ? ` ${renewal}` : ''}, unless your account has pay-as-you-go credits or usage-based billing.`);
   } else {
     lines.push(`**ElevenLabs credits left: ${formatCredits(left)}** of ${formatCredits(balance.limit)}`);
-    lines.push(`About **${longDuration(minutes)}** of dictation, ${rateText(rate)}`);
+    lines.push(`About **${longDuration(minutes)}** of dictation, ${rateText(rate, isFreePlan(balance))}`);
   }
   lines.push(escapeMarkdown(balanceFacts(balance, now).join(' · ')));
   if (problem) {
@@ -102,11 +102,13 @@ export function problemText(problem: BalanceProblem): string {
 }
 
 /** How the time left was worked out, after "About 80 hours of dictation, ". */
-function rateText(rate: CreditRate): string {
+function rateText(rate: CreditRate, free: boolean): string {
   const perMinute = `at about ${Math.round(rate.creditsPerMinute)} credits a minute`;
-  return rate.measuredSeconds >= MEASURED_SECONDS
-    ? `${perMinute}, what your dictation has cost so far`
-    : `${perMinute}, ElevenLabs' API price for Scribe v2 on your plan`;
+  if (rate.measuredSeconds >= MEASURED_SECONDS) {
+    return `${perMinute}, what your dictation has cost so far`;
+  }
+  // One figure for every paid plan: their credits buy 16.7 (Starter) to 20.2 (Pro and up) a minute
+  return free ? `${perMinute}, ElevenLabs' API price for Scribe v2 on the Free plan` : `${perMinute}, roughly ElevenLabs' API price for Scribe v2 on paid plans`;
 }
 
 /** Plan, renewal and when the balance was read, e.g. ["Creator plan", "renews in 26 days", "checked at 14:02"]. */
