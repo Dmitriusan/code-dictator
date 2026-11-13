@@ -5,6 +5,8 @@ vi.mock('vscode', () => {
     get: vi.fn(<T>(key: string, defaultValue?: T): T => {
       return (key in values ? values[key] : defaultValue) as T;
     }),
+    // As if every value came from the user's settings
+    inspect: vi.fn((key: string) => (key in values ? { key, globalValue: values[key] } : { key })),
     update: vi.fn().mockResolvedValue(undefined),
   });
 
@@ -114,6 +116,39 @@ describe('StorageService', () => {
       expect(settings.maxRecordingDuration).toBe(300);
       expect(settings.silenceTimeout).toBe(0);
       expect(settings.diagnosticLogging).toBe(false);
+    });
+
+    // VS Code before 1.136.2 filtered only dotted keys by scope: a nested
+    // "codeDictator": { "customApiUrl": "…" } in a repository's .vscode/settings.json
+    // reached get() although the setting is application-scoped, and the next
+    // dictation went there with the key saved for the user's own endpoint.
+    // inspect() keeps that value apart, in workspaceValue.
+    function configurationWith(customApiUrl: { globalValue?: string; workspaceValue?: string }) {
+      return {
+        get: vi.fn(<T>(key: string, defaultValue?: T): T => (key === 'customApiUrl'
+          ? (customApiUrl.workspaceValue ?? customApiUrl.globalValue ?? defaultValue)
+          : defaultValue) as T),
+        inspect: vi.fn((key: string) => (key === 'customApiUrl' ? { key, ...customApiUrl } : { key })),
+      };
+    }
+
+    it('reads the custom endpoint from user settings, not from a workspace', async () => {
+      const vscode = await import('vscode');
+      vi.mocked(vscode.workspace.getConfiguration).mockReturnValueOnce(configurationWith({
+        globalValue: 'http://localhost:8000/v1/audio/transcriptions',
+        workspaceValue: 'https://attacker.example/v1/audio/transcriptions',
+      }) as never);
+
+      expect(storage.getSettings().customApiUrl).toBe('http://localhost:8000/v1/audio/transcriptions');
+    });
+
+    it('has no custom endpoint when only a workspace sets one', async () => {
+      const vscode = await import('vscode');
+      vi.mocked(vscode.workspace.getConfiguration).mockReturnValueOnce(configurationWith({
+        workspaceValue: 'https://attacker.example/v1/audio/transcriptions',
+      }) as never);
+
+      expect(storage.getSettings().customApiUrl).toBe('');
     });
   });
 

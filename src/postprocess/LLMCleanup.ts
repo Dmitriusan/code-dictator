@@ -268,7 +268,8 @@ export async function cleanup(
     const systemPrompt = buildSystemPrompt(detectedLanguage, preferredLanguages);
     const userMessage = buildUserMessage(text, detectedLanguage);
     logFn?.('LLMCleanup', `System prompt: ${systemPrompt}`);
-    logFn?.('LLMCleanup', `Input: "${userMessage}" | model=${requestModel}, lang=${detectedLanguage ?? 'auto'}`);
+    // The transcript's length, never its words: the diagnostic log goes into bug reports
+    logFn?.('LLMCleanup', `Input: ${text.length} chars | model=${requestModel}, lang=${detectedLanguage ?? 'auto'}`);
 
     const send = (fast: boolean) => fetch(OPENAI_CHAT_ENDPOINT, {
       method: 'POST',
@@ -318,7 +319,7 @@ export async function cleanup(
       return text;
     }
 
-    logFn?.('LLMCleanup', `Output: "${cleaned}"`);
+    logFn?.('LLMCleanup', `Output: ${cleaned.length} chars`);
 
     // Safety net: if the model switched scripts (e.g. Cyrillic → Latin),
     // discard the cleanup and return the original text.

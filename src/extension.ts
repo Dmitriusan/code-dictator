@@ -73,6 +73,46 @@ const BALANCE_MAX_AGE_MS = 10 * 60_000;
 const LIVE_HOLD_SPEECH_SECONDS = 6;
 /** Changes of each API key ("codeDictator.<provider>.apiKey"), so that a dictation's parts are never sent with two keys. */
 const apiKeyChanges = new Map<string, number>();
+/** Bytes a second of 16 kHz mono 16-bit audio takes: an audio file's deadline goes by its size. */
+const PCM_BYTES_PER_SECOND = 32_000;
+
+/**
+ * A request for this much audio that gets no answer by then has failed: the
+ * deadline of a part sent while recording (requestTimeoutMs in
+ * LiveTranscription), so that only a stalled connection reaches it.
+ */
+function requestDeadlineMs(audioSeconds: number): number {
+  return 60_000 + audioSeconds * 3000;
+}
+
+/**
+ * The signal for one speech-to-text request: aborted by `signal` (Escape) and
+ * after `timeoutMs`. A request that gets no answer by then has failed, and
+ * timedOut() tells that apart from a cancel. done() stops the clock.
+ */
+function withDeadline(signal: AbortSignal, timeoutMs: number): { signal: AbortSignal; seconds: number; timedOut(): boolean; done(): void } {
+  const request = new AbortController();
+  let timedOut = false;
+  const onCancel = () => request.abort();
+  const timer = setTimeout(() => {
+    timedOut = true;
+    request.abort();
+  }, timeoutMs);
+  if (signal.aborted) {
+    request.abort();
+  } else {
+    signal.addEventListener('abort', onCancel, { once: true });
+  }
+  return {
+    signal: request.signal,
+    seconds: Math.round(timeoutMs / 1000),
+    timedOut: () => timedOut && !signal.aborted,
+    done: () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onCancel);
+    },
+  };
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize services
@@ -560,6 +600,8 @@ async function transcribeRecording(
     const provider = createProvider(settings, (p) => storageService.getApiKey(p));
     let result: TranscriptionResult | undefined;
     let transcribedLive = false;
+    // The whole recording's request: a stalled connection fails it, and the recording is kept
+    let deadline: ReturnType<typeof withDeadline> | undefined;
     try {
       if (live) {
         // Undefined when the whole recording has to be sent after all; throws when its rest failed
@@ -568,11 +610,12 @@ async function transcribeRecording(
       }
       if (!result) {
         diagLog('STT', `Calling ${provider.name} (${provider.id}), language: ${settings.language || 'auto'}, mimeType: ${audioPayload.mimeType}, audioSize: ${audioPayload.buffer.length} bytes${whisperPrompt ? ', prompt hint: yes' : ''}`);
+        deadline = withDeadline(abort.signal, requestDeadlineMs(audioPayload.durationMs / 1000));
         result = await provider.transcribe(audioPayload.buffer, {
           language: settings.language || undefined,
           prompt: whisperPrompt,
           mimeType: audioPayload.mimeType,
-          signal: abort.signal,
+          signal: deadline.signal,
           onRetry: (reason, delayMs) => diagLog('STT', `${reason} Retrying in ${delayMs / 1000}s`),
         });
       }
@@ -581,16 +624,22 @@ async function transcribeRecording(
       if (provider.id === 'elevenlabs') {
         checkBalanceSoon(); // the error may be that the credits ran out
       }
-      if (isAbortError(error) || abort.signal.aborted) {
+      const timedOut = deadline?.timedOut() ?? false;
+      if (!timedOut && (isAbortError(error) || abort.signal.aborted)) {
         throw error; // Escape — reported as a cancellation below, whatever the request failed with
       }
-      const message = error instanceof Error ? error.message : String(error);
+      const message = timedOut
+        ? `${provider.name} did not answer within ${deadline!.seconds} s`
+        : error instanceof Error ? error.message : String(error);
       diagLog('STT', `Transcription failed: ${message}`);
       // Quota, rate-limit and network errors must not cost the user what they said
       showTranscriptionFailed(message, retrying ?? await keepFailedRecording(audioPayload));
       return;
+    } finally {
+      deadline?.done();
     }
-    diagLog('STT', `Result${transcribedLive ? ' (transcribed while recording)' : ''}: "${result.text}", language=${result.language ?? 'n/a'}, duration=${result.duration ?? 'n/a'}s, cost=${result.cost ?? 'n/a'}`);
+    // How long the text is, never what was said: users paste this log into bug reports
+    diagLog('STT', `Result${transcribedLive ? ' (transcribed while recording)' : ''}: ${result.text.length} chars, language=${result.language ?? 'n/a'}, duration=${result.duration ?? 'n/a'}s, cost=${result.cost ?? 'n/a'}`);
     const transcribedMs = transcribedLive && result.duration !== undefined ? result.duration * 1000 : audioPayload.durationMs;
     unrecorded = { durationMs: transcribedMs, cost: result.cost ?? 0 };
     if (provider.id === 'elevenlabs') {
@@ -607,7 +656,7 @@ async function transcribeRecording(
     if (!result.text.trim() || isHallucination(result.text)) {
       statusBar.updateState('idle');
       if (result.text.trim()) {
-        diagLog('STT', `Hallucination filtered: "${result.text}"`);
+        diagLog('STT', `Hallucination filtered: ${result.text.length} chars`);
       }
       statusBar.showTransientMessage('$(warning) No speech detected', 2000);
       if (retrying) {
@@ -827,11 +876,16 @@ async function handleTranscribeFile(): Promise<void> {
     return;
   }
 
+  // Escape cancels a file transcription as it does a dictation's
+  const abort = new AbortController();
+  pipelineAborts.add(abort);
+  vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', true);
+  let deadline: ReturnType<typeof withDeadline> | undefined;
   try {
     statusBar.updateState('transcribing');
 
-    // Read the file
-    const audioBuffer = Buffer.from(await fs.promises.readFile(fileUri.fsPath));
+    // Read the file. readFile gives a Buffer of its own: a copy would hold the audio in memory a second time
+    const audioBuffer = await fs.promises.readFile(fileUri.fsPath);
 
     // Derive MIME type from file extension so the STT API receives the correct filename hint
     const ext = fileUri.fsPath.split('.').pop()?.toLowerCase() ?? '';
@@ -845,11 +899,14 @@ async function handleTranscribeFile(): Promise<void> {
     };
     const fileMimeType = extMimeMap[ext] ?? 'audio/webm';
 
-    // Transcribe
+    // Transcribe: the deadline goes by the file's size, as its length is not known for compressed audio
+    deadline = withDeadline(abort.signal, requestDeadlineMs(audioBuffer.length / PCM_BYTES_PER_SECOND));
     const result = await provider.transcribe(audioBuffer, {
       language: settings.language || undefined,
       mimeType: fileMimeType,
+      signal: deadline.signal,
     }).finally(() => {
+      deadline?.done();
       if (provider.id === 'elevenlabs') {
         checkBalanceSoon();
       }
@@ -879,7 +936,7 @@ async function handleTranscribeFile(): Promise<void> {
       if (cleanupKey) {
         statusBar.updateState('cleaning');
         try {
-          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages, detectedLang);
+          text = await llmCleanup(text, cleanupKey, settings.cleanupModel, settings.preferredLanguages, detectedLang, abort.signal);
         } catch {
           // Fall through with raw text
         }
@@ -894,6 +951,9 @@ async function handleTranscribeFile(): Promise<void> {
         }
       }
     }
+
+    // Escape during AI cleanup: cleanup() hands back the raw text, and a cancelled transcription inserts nothing
+    abort.signal.throwIfAborted();
 
     // Inject
     const destination = await textInjector.inject(
@@ -923,8 +983,22 @@ async function handleTranscribeFile(): Promise<void> {
     }
   } catch (error) {
     statusBar.updateState('idle');
-    const message = error instanceof Error ? error.message : String(error);
+    const timedOut = deadline?.timedOut() ?? false;
+    if (!timedOut && (isAbortError(error) || abort.signal.aborted)) {
+      diagLog('Extension', 'File transcription cancelled by user');
+      statusBar.showTransientMessage('$(x) Cancelled', 1500);
+      return;
+    }
+    const message = timedOut
+      ? `${provider.name} did not answer within ${deadline!.seconds} s`
+      : error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(`Code Dictator: File transcription failed — ${message}`);
+  } finally {
+    deadline?.done();
+    pipelineAborts.delete(abort);
+    if (pipelineAborts.size === 0) {
+      vscode.commands.executeCommand('setContext', 'codeDictator.isProcessing', false);
+    }
   }
 }
 

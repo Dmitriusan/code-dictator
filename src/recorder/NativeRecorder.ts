@@ -34,6 +34,8 @@ export class NativeRecorder {
   private stderrData = '';
   private stoppingGracefully = false;
   private writeStream: fs.WriteStream | null = null;
+  /** Why writing the streamed recording to its file failed (disk full, temp folder gone); the stop reports it. */
+  private writeError: Error | null = null;
   private silenceTimeout = 0;
   private silenceStart: number | null = null;
   private silenceCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -248,17 +250,33 @@ export class NativeRecorder {
         // tempFile is assigned above (before this Promise), so the non-null
         // assertion is safe — TS just can't carry the narrowing into the closure.
         if (useStdoutPipe) {
-          this.writeStream = fs.createWriteStream(this.tempFile!);
-          const writeStream = this.writeStream;
+          const writeStream = fs.createWriteStream(this.tempFile!);
+          this.writeStream = writeStream;
+          // A stream 'error' with no listener is thrown in the extension host.
+          // Once cleanup() has let go of the stream (and destroyed it), its
+          // errors are those of writes it dropped, and mean nothing.
+          writeStream.on('error', (err) => {
+            if (this.writeStream === writeStream) {
+              diagLog('NativeRecorder', `Could not write the recording to ${this.tempFile}: ${err.message}`);
+              this.writeError ??= err;
+            }
+          });
           // Write WAV header (will be finalized on stop)
           writeStream.write(createWavHeader());
           let stdoutChunks = 0;
 
           this.process.stdout?.on('data', (chunk: Buffer) => {
+            // A recording that was cancelled or ended takes no more audio from its process
+            if (this.writeStream !== writeStream) {
+              return;
+            }
             this.totalBytesReceived += chunk.length;
             const totalBytes = this.totalBytesReceived;
             stdoutChunks++;
-            writeStream.write(chunk);
+            // Not after the stop ended the stream, nor after a write failed
+            if (writeStream.writable) {
+              writeStream.write(chunk);
+            }
             this.analyzeChunkForSilence(chunk);
             // Log first chunk and then every ~5 seconds (at 16kHz mono 16-bit ≈ 32KB/s)
             if (stdoutChunks === 1 || totalBytes % 160000 < chunk.length) {
@@ -500,6 +518,14 @@ export class NativeRecorder {
 
       const readAndResolve = () => {
         try {
+          if (this.writeError) {
+            // What reached the file stops where the write failed
+            const error = new Error(`Could not write the recording to ${path.dirname(tempFile)}: ${this.writeError.message}`);
+            this.deleteTempFile();
+            this.cleanup();
+            reject(error);
+            return;
+          }
           if (fs.existsSync(tempFile)) {
             const buffer = fs.readFileSync(tempFile);
 
@@ -707,7 +733,14 @@ export class NativeRecorder {
     this.onNoAudioData = null;
     this.stderrData = '';
     this.stoppingGracefully = false;
+    // However the recording ended (stop, cancel, the process exiting), its file
+    // is closed: a stream left open keeps its descriptor, and the deleted file's
+    // disk space, until VS Code exits
+    if (this.writeStream && !this.writeStream.destroyed) {
+      this.writeStream.destroy();
+    }
     this.writeStream = null;
+    this.writeError = null;
     this.silenceTimeout = 0;
     this.silenceStart = null;
     this.chunkCount = 0;

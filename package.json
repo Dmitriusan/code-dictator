@@ -2,7 +2,7 @@
   "name": "code-dictator",
   "displayName": "Code Dictator",
   "description": "Voice dictation for Claude Code, Copilot, Cline, or any AI chat in VS Code — 90+ languages, powered by ElevenLabs. Press Alt+D, talk, paste.",
-  "version": "1.1.30",
+  "version": "1.1.31",
   "publisher": "irrationalways",
   "license": "MIT",
   "engines": {
@@ -173,6 +173,7 @@
             "order": 3,
             "type": "string",
             "default": "",
+            "scope": "application",
             "description": "Custom speech-to-text API endpoint URL. Only used when Provider is set to \"Custom\" (e.g., http://localhost:8000/v1/audio/transcriptions)"
           },
           "codeDictator.language": {

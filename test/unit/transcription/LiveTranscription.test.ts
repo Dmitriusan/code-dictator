@@ -167,11 +167,13 @@ describe('LiveTranscription', () => {
     transcribed = [];
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const s of sessions) {
       s.cancel();
     }
-    fs.rmSync(dir, { recursive: true, force: true });
+    // A cancelled session closes its file a moment later, and until then
+    // Windows refuses to remove the folder (ENOTEMPTY)
+    await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
 
   function start(options: Partial<LiveTranscriptionOptions> = {}): LiveTranscription {

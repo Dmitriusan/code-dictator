@@ -101,7 +101,11 @@ export class StorageService {
     return {
       provider: config.get<ProviderType>('provider', 'elevenlabs'),
       voiceModel: config.get<string>('voiceModel', 'auto'),
-      customApiUrl: config.get<string>('customApiUrl', ''),
+      // Where dictations go, with the custom endpoint's key: from the user's own settings
+      // only. Its "application" scope keeps a workspace's value out of get() from VS Code
+      // 1.136.2 on, but before that a nested object in a repository's .vscode/settings.json,
+      // "codeDictator": { "customApiUrl": "…" }, still came through get(); never through globalValue
+      customApiUrl: config.inspect<string>('customApiUrl')?.globalValue ?? '',
       recordingMode: config.get<'toggle' | 'hold'>('recording.mode', 'toggle'),
       audioIsolation: config.get<'off' | 'basic' | 'aggressive'>('recording.audioIsolation', 'basic'),
       language: config.get<string>('language', ''),
